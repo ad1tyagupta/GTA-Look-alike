@@ -11,15 +11,33 @@ Original prompt: develop a GTA style game where the camera is on top. A player c
 - Added a guaranteed nearby parked starter car so enter/drive/exit flows are consistently testable.
 - Added scenario action payloads under `test-actions/` for on-foot roam, drive/exit, and longer police-pressure sequences.
 - Executed Playwright skill-client runs and inspected all generated screenshots and state JSON artifacts.
+- Expanded map size to `5400x3900` with denser road network and more traffic/pedestrians.
+- Added shooting system (`Space`) with bullets, cooldown, muzzle flashes, and collision impacts against NPCs/cars/task targets.
+- Changed car interaction key to `E`/`B` (on-foot and in-car), preserving `Space` for shooting.
+- Added police-on-foot behavior: police officers can dismount from police cars and chase the player.
+- Rebalanced movement so player on-foot speed and many traffic cars are faster than police pursuit units.
+- Added mission system with chained tasks, marker guidance, and money rewards.
+- Added health regeneration cooldown (regen after no damage + low activity idle period).
+- Added minimap on bottom-right with player, police, mission marker, roads/buildings, and camera bounds.
+- Added richer rendering pass (textured terrain/roads, crosswalks, detailed vehicles, styled pedestrians, varied building archetypes, environmental props, shadows/highlights).
+- Updated HUD with money and active task text.
 
 ## TODO
-- Optional: tune wanted-level triggers to escalate faster during car crashes for more aggressive police chases.
-- Optional: add combat, weapon pickups, and mission checkpoints to better match full classic-GTA gameplay loops.
-- Optional: add richer NPC variety (buses/taxis, parked cars, gang/police pedestrian roles, ambient events).
+- Add additional mission archetypes (escort, timed chase, cargo pickup).
+- Improve AI pathfinding around dense building corners for police-on-foot.
+- Add audio (engine loops, sirens, gunfire, mission complete stingers).
+- Add save/load progression for money/task stage.
 
 ## Test Runs
 - `node --check game.js` passed.
-- `node $WEB_GAME_CLIENT --url http://127.0.0.1:5173 --actions-file test-actions/on-foot-roam.json --iterations 2 --pause-ms 180 --screenshot-dir output/web-game/on-foot`
-- `node $WEB_GAME_CLIENT --url http://127.0.0.1:5173 --actions-file test-actions/car-drive-exit.json --iterations 2 --pause-ms 180 --screenshot-dir output/web-game/car-drive`
-- `node $WEB_GAME_CLIENT --url http://127.0.0.1:5173 --actions-file test-actions/police-pressure.json --iterations 2 --pause-ms 180 --screenshot-dir output/web-game/police-pressure`
-- No `errors-*.json` files were produced in these runs (no captured console/page errors).
+- Minimal harness check:
+  - `node $WEB_GAME_CLIENT --url http://127.0.0.1:5177 --actions-json '{"steps":[{"buttons":["enter"],"frames":2},{"buttons":[],"frames":2}]}' --iterations 1 --pause-ms 80 --screenshot-dir output/web-game/smoke-lite`
+- Scenario checks:
+  - `node $WEB_GAME_CLIENT --url http://127.0.0.1:5177 --actions-file test-actions/on-foot-roam.json --iterations 1 --pause-ms 180 --screenshot-dir output/web-game/on-foot`
+  - `node $WEB_GAME_CLIENT --url http://127.0.0.1:5177 --actions-file test-actions/car-drive-exit.json --iterations 1 --pause-ms 180 --screenshot-dir output/web-game/car-drive`
+  - `node $WEB_GAME_CLIENT --url http://127.0.0.1:5177 --actions-file test-actions/police-pressure.json --iterations 1 --pause-ms 220 --screenshot-dir output/web-game/police-pressure`
+- Additional mission movement validation:
+  - `node $WEB_GAME_CLIENT --url http://127.0.0.1:5178 --actions-json '{"steps":[{"buttons":["enter"],"frames":2},{"buttons":["right"],"frames":70},{"buttons":["down"],"frames":74},{"buttons":[],"frames":20}]}' --iterations 1 --pause-ms 180 --screenshot-dir output/web-game/task-reach`
+- Direct visual sanity check with Playwright screenshot:
+  - `output/web-game/debug-current.png`
+- No `errors-*.json` files were produced in current runs (no captured console/page errors).

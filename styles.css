@@ -107,8 +107,11 @@ body {
   left: 50%;
   transform: translateX(-50%);
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 8px;
-  font-size: clamp(0.66rem, 1.4vw, 0.9rem);
+  width: min(96vw, 1160px);
+  font-size: clamp(0.64rem, 1.18vw, 0.9rem);
   letter-spacing: 0.08em;
   pointer-events: none;
   user-select: none;
@@ -119,4 +122,11 @@ body {
   border: 1px solid rgba(190, 216, 131, 0.45);
   padding: 5px 8px;
   border-radius: 6px;
+  white-space: nowrap;
+}
+
+#hud-task {
+  max-width: min(74vw, 620px);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
