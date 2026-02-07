@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Top-Down City Driver</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <main class="app">
+    <canvas id="game" aria-label="Top-down city game"></canvas>
+    <section id="start-overlay" class="overlay">
+      <div class="panel">
+        <h1>Top-Down City Driver</h1>
+        <p>Roam the city like classic GTA-style games.</p>
+        <ul>
+          <li>Move on foot: WASD or Arrow Keys</li>
+          <li>Enter or exit nearby car: Space</li>
+          <li>Drive: Arrow Keys or WASD</li>
+          <li>Pause: P | Restart: R</li>
+          <li>Toggle fullscreen: F</li>
+        </ul>
+        <button id="start-btn" type="button">Start Game</button>
+      </div>
+    </section>
+    <section id="hud" class="hud">
+      <span id="hud-mode">ON FOOT</span>
+      <span id="hud-health">HEALTH 100</span>
+      <span id="hud-wanted">WANTED 0</span>
+      <span id="hud-speed">SPEED 0</span>
+    </section>
+  </main>
+  <script type="module" src="./game.js"></script>
+</body>
+</html>
