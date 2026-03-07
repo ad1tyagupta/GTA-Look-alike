@@ -2,8 +2,12 @@ export const CONFIG = {
   worldWidth: 9600,
   worldHeight: 6400,
   fixedDt: 1 / 60,
+  paceScale: 1.2,
   roadWidth: 170,
   sidewalkWidth: 28,
+  civilianCount: 320,
+  trafficCount: 90,
+  policeCarCount: 20,
   playerAccel: 930,
   playerDrag: 5.9,
   playerMaxSpeed: 286,
@@ -143,9 +147,11 @@ export const BUILDING_STYLES = {
 };
 
 export const START_SCREEN_LINES = [
-  "Move: WASD / Arrows",
-  "Shoot: Space",
-  "Enter or exit car: E",
-  "Pause: P   Restart checkpoint: R",
-  "Fullscreen: F",
+  "Street movement: WASD / Arrows",
+  "Fire weapon: Space",
+  "Jack or leave a vehicle: E",
+  "Pause operation: P    Reset stage: R",
+  "Fullscreen display: F",
+  "Radio chatter auto-plays. Enter or Space skips it.",
+  "Progress is archived automatically at mission stages.",
 ];

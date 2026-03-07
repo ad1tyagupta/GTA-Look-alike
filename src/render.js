@@ -40,6 +40,23 @@ function drawRoundedRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
+function drawWrappedText(ctx, text, x, y, maxWidth, lineHeight) {
+  const words = text.split(" ");
+  let line = "";
+  let lineIndex = 0;
+  for (const word of words) {
+    const test = line ? `${line} ${word}` : word;
+    if (ctx.measureText(test).width > maxWidth && line) {
+      ctx.fillText(line, x, y + lineIndex * lineHeight);
+      line = word;
+      lineIndex += 1;
+    } else {
+      line = test;
+    }
+  }
+  if (line) ctx.fillText(line, x, y + lineIndex * lineHeight);
+}
+
 function drawGround(ctx, canvas, state) {
   for (const district of state.world.districts) {
     const sx = district.x - state.camera.x;
@@ -520,6 +537,16 @@ function drawUi(ctx, canvas, state, assets) {
     ctx.fillText(state.mission.toast.text, canvas.width * 0.5, canvas.height - 46);
   }
 
+  if (state.save.toast) {
+    ctx.fillStyle = "rgba(16, 22, 18, 0.72)";
+    drawRoundedRect(ctx, canvas.width - 194, 66, 176, 28, 8);
+    ctx.fill();
+    ctx.fillStyle = "#cde9ad";
+    ctx.font = "700 12px Georgia, serif";
+    ctx.textAlign = "center";
+    ctx.fillText(state.save.toast.text, canvas.width - 106, 84);
+  }
+
   if (state.wanted > 0.15) {
     ctx.fillStyle = "rgba(0,0,0,0.44)";
     ctx.fillRect(0, canvas.height - 18, canvas.width, 18);
@@ -584,6 +611,39 @@ function drawUi(ctx, canvas, state, assets) {
   }
 }
 
+function drawDialogueOverlay(ctx, canvas, state) {
+  if (!state.dialogue.active) return;
+  const current = state.dialogue.queue[state.dialogue.index];
+  if (!current) return;
+  ctx.fillStyle = "rgba(0,0,0,0.58)";
+  ctx.fillRect(0, 0, canvas.width, 52);
+  ctx.fillRect(0, canvas.height - 168, canvas.width, 168);
+  ctx.fillStyle = "rgba(10,14,19,0.86)";
+  drawRoundedRect(ctx, 40, canvas.height - 148, canvas.width - 80, 108, 14);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(232, 204, 126, 0.58)";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  ctx.fillStyle = "#f0cd7b";
+  ctx.font = "700 18px Georgia, serif";
+  ctx.textAlign = "left";
+  ctx.fillText(state.dialogue.title.toUpperCase(), 62, canvas.height - 114);
+
+  ctx.fillStyle = "#d8e4ef";
+  ctx.font = "700 16px Georgia, serif";
+  ctx.fillText(current.speaker.toUpperCase(), 62, canvas.height - 86);
+
+  ctx.fillStyle = "#f4efe2";
+  ctx.font = "15px Georgia, serif";
+  drawWrappedText(ctx, current.text, 62, canvas.height - 58, canvas.width - 180, 20);
+
+  ctx.fillStyle = "rgba(232, 221, 187, 0.86)";
+  ctx.font = "12px Georgia, serif";
+  ctx.textAlign = "right";
+  ctx.fillText("ENTER / SPACE TO SKIP", canvas.width - 62, canvas.height - 56);
+}
+
 export function renderGame(ctx, canvas, state, assets) {
   drawGround(ctx, canvas, state);
   drawRoads(ctx, canvas, state, assets);
@@ -598,4 +658,5 @@ export function renderGame(ctx, canvas, state, assets) {
   drawBullets(ctx, state);
   drawMissionMarker(ctx, state);
   drawUi(ctx, canvas, state, assets);
+  drawDialogueOverlay(ctx, canvas, state);
 }

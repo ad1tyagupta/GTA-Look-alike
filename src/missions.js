@@ -3,24 +3,32 @@ export const MISSION_CHAIN = [
     id: "first_run",
     name: "First Run",
     reward: 350,
+    briefing: [
+      { speaker: "Fixer", text: "You want in, you move fast and keep quiet." },
+      { speaker: "Fixer", text: "Pick up the mall bag, drop it at the safehouse, and do not spook the cops." },
+    ],
     stages: [
-      { type: "meet", anchor: "fixerCorner", radius: 90, checkpoint: true, label: "Meet the fixer at Weston Heights." },
+      { type: "meet", anchor: "fixerCorner", radius: 90, checkpoint: true, label: "Meet the fixer at Weston Heights.", dialogue: [{ speaker: "Fixer", text: "You made it. The compact is yours for the run." }] },
       {
         type: "enterVehicle",
         spawnVehicle: { key: "starterCompact", anchor: "fixerCorner", offsetX: 64, offsetY: 42, classId: "compact", color: "#d8a248" },
         label: "Get in the fixer's compact.",
       },
-      { type: "driveTo", anchor: "mallSquare", radius: 130, checkpoint: true, label: "Drive to Weston Mall and wait for the runner." },
-      { type: "collectPackage", anchor: "mallSquare", radius: 90, checkpoint: true, label: "Collect the duffel from the runner." },
-      { type: "driveTo", anchor: "safehouse", radius: 130, checkpoint: true, label: "Deliver the package to the safehouse garage." },
+      { type: "driveTo", anchor: "mallSquare", radius: 130, checkpoint: true, label: "Drive to Weston Mall and wait for the runner.", dialogue: [{ speaker: "Runner", text: "Circle the block once. I will be on the south side." }] },
+      { type: "collectPackage", anchor: "mallSquare", radius: 90, checkpoint: true, label: "Collect the duffel from the runner.", dialogue: [{ speaker: "Runner", text: "Bag is packed. Move before the plaza cameras loop." }] },
+      { type: "driveTo", anchor: "safehouse", radius: 130, checkpoint: true, label: "Deliver the package to the safehouse garage.", dialogue: [{ speaker: "Fixer", text: "Straight home now. Clean first run, clean reputation." }] },
     ],
   },
   {
     id: "warehouse_burn",
     name: "Warehouse Burn",
     reward: 780,
+    briefing: [
+      { speaker: "Fixer", text: "Rail yard stash got too comfortable." },
+      { speaker: "Fixer", text: "Light it up, hold for the signal, then disappear into the park." },
+    ],
     stages: [
-      { type: "driveTo", anchor: "railYard", radius: 150, checkpoint: true, label: "Head to the rail yard staging area." },
+      { type: "driveTo", anchor: "railYard", radius: 150, checkpoint: true, label: "Head to the rail yard staging area.", dialogue: [{ speaker: "Fixer", text: "Watch the cranes. Their guards like high ground." }] },
       {
         type: "destroyTargets",
         anchor: "railYard",
@@ -37,6 +45,7 @@ export const MISSION_CHAIN = [
         radius: 250,
         duration: 18,
         wanted: 1.8,
+        dialogue: [{ speaker: "Fixer", text: "Stay in the smoke. I need eighteen clean seconds." }],
         label: "Hold the yard while the fire spreads.",
       },
       { type: "escapeWanted", targetWanted: 0.25, anchor: "parkCircle", radius: 160, checkpoint: true, label: "Lose the police around Park Circle." },
@@ -47,6 +56,10 @@ export const MISSION_CHAIN = [
     id: "redline_courier",
     name: "Redline Courier",
     reward: 1120,
+    briefing: [
+      { speaker: "Courier Boss", text: "This route pays because it is ugly." },
+      { speaker: "Courier Boss", text: "Hit every drop in order and never stop rolling." },
+    ],
     stages: [
       { type: "driveTo", anchor: "harbor", radius: 170, checkpoint: true, label: "Drive to Harbor Works for the pickup." },
       { type: "collectPackage", anchor: "harbor", radius: 95, checkpoint: true, label: "Collect the package from the dock foreman." },
@@ -56,6 +69,7 @@ export const MISSION_CHAIN = [
         timeLimit: 94,
         wanted: 1.8,
         checkpoint: true,
+        dialogue: [{ speaker: "Courier Boss", text: "Clock is live. Plaza, tower, garage, then home." }],
         label: "Hit every drop before the clock runs out.",
       },
       { type: "escapeWanted", targetWanted: 0.2, anchor: "safehouse", radius: 120, checkpoint: true, label: "Cool off at the safehouse." },
@@ -65,6 +79,10 @@ export const MISSION_CHAIN = [
     id: "convoy_breaker",
     name: "Convoy Breaker",
     reward: 1480,
+    briefing: [
+      { speaker: "Chop Shop Lead", text: "Police are moving intel through the center." },
+      { speaker: "Chop Shop Lead", text: "Take their interceptor, break the courier, and bring me the case." },
+    ],
     stages: [
       { type: "meet", anchor: "downtownGarage", radius: 90, checkpoint: true, label: "Meet the chop-shop crew in Grand Central." },
       { type: "stealVehicle", anchor: "policeHQ", radius: 120, wanted: 1.7, checkpoint: true, label: "Hijack the marked interceptor near police HQ." },
@@ -74,6 +92,7 @@ export const MISSION_CHAIN = [
         endAnchor: "railYard",
         enemyCount: 4,
         checkpoint: true,
+        dialogue: [{ speaker: "Chop Shop Lead", text: "Target rolling east. Hit hard and do not let them reach the yard." }],
         label: "Run down the courier and break the convoy.",
       },
       { type: "collectPackage", anchor: "railYard", radius: 95, checkpoint: true, label: "Grab the dropped intel case." },
@@ -91,6 +110,10 @@ export const MISSION_CHAIN = [
     id: "tower_blackout",
     name: "Tower Blackout",
     reward: 1850,
+    briefing: [
+      { speaker: "Fixer", text: "Finance Tower keeps the district cameras alive." },
+      { speaker: "Fixer", text: "Kill the lobby, kill the transformers, then vanish into Mansion Row." },
+    ],
     stages: [
       { type: "driveTo", anchor: "financeTower", radius: 160, checkpoint: true, label: "Move on Finance Tower." },
       {
@@ -110,6 +133,7 @@ export const MISSION_CHAIN = [
         enemyCount: 3,
         wanted: 2.3,
         checkpoint: true,
+        dialogue: [{ speaker: "Fixer", text: "Transformers are marked. Crack them and the whole center goes blind." }],
         label: "Shoot out the backup transformers.",
       },
       {
@@ -127,6 +151,10 @@ export const MISSION_CHAIN = [
     id: "harbor_siege",
     name: "Harbor Siege",
     reward: 2400,
+    briefing: [
+      { speaker: "Fixer", text: "This is the one that moves the whole city." },
+      { speaker: "Fixer", text: "Take the van, take the harbor, and punch a line straight to the airstrip." },
+    ],
     stages: [
       { type: "driveTo", anchor: "foundry", radius: 180, checkpoint: true, label: "Rendezvous at the foundry." },
       {
@@ -136,6 +164,7 @@ export const MISSION_CHAIN = [
         vehicleColor: "#d99451",
         vehicleLabel: "siegeVan",
         checkpoint: true,
+        dialogue: [{ speaker: "Mechanic", text: "Armor is rough but it will take a beating. Keep the front moving." }],
         label: "Take the armored van for the harbor push.",
       },
       { type: "driveTo", anchor: "harbor", radius: 180, checkpoint: true, label: "Push the van through to Harbor Works." },
@@ -164,6 +193,7 @@ export const MISSION_CHAIN = [
         radius: 280,
         duration: 34,
         wanted: 3.4,
+        dialogue: [{ speaker: "Fixer", text: "Every unit in Harbor Works is collapsing on you. Hold the line." }],
         label: "Hold the dock while tactical police push in.",
       },
       { type: "driveTo", anchor: "airstrip", radius: 190, checkpoint: true, label: "Break through and deliver the van to the airstrip." },

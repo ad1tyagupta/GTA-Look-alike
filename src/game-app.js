@@ -2,7 +2,7 @@ import { CONFIG, START_SCREEN_LINES, VEHICLE_CLASSES } from "./config.js";
 import { AudioSystem } from "./audio.js";
 import { MISSION_CHAIN } from "./missions.js";
 import { createRenderAssets, renderGame } from "./render.js";
-import { createWorld, findDistrict, makeSeededRng, nearestNavNode, pickRoadblockSpot } from "./world.js";
+import { createWorld, findDistrict, findAccessiblePoint, makeSeededRng, nearestNavNode, pickRoadblockSpot, planNavRoute } from "./world.js";
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -60,6 +60,9 @@ function buildVehicle(id, kind, classId, x, y, angle, paint, path = null) {
     offscreenRespawn: 0,
     health: kind === "police" ? 180 : classId === "truck" ? 210 : 120,
     lastSeenPlayer: null,
+    navPath: [],
+    navIndex: 0,
+    navReplanAt: 0,
   };
 }
 
@@ -105,6 +108,9 @@ function buildOfficer(id, x, y, carId) {
     flankSide: Math.random() < 0.5 ? -1 : 1,
     lastSeenPlayer: null,
     weaponReady: true,
+    navPath: [],
+    navIndex: 0,
+    navReplanAt: 0,
   };
 }
 
@@ -225,6 +231,7 @@ function resolveDynamicCircle(a, b, restitution) {
 }
 
 export function initializeGame() {
+  const SAVE_KEY = "city-heat-save-v1";
   const canvas = document.getElementById("game");
   const ctx = canvas.getContext("2d");
   const startOverlay = document.getElementById("start-overlay");
@@ -288,12 +295,26 @@ export function initializeGame() {
       targets: [],
       timer: 0,
       toast: null,
+      briefedMissionId: null,
       chaseVehicleId: null,
       chaseEnd: null,
       objectiveVehicleId: null,
       checkpointLabel: null,
       runtime: {},
       completed: false,
+    },
+    dialogue: {
+      active: false,
+      title: "",
+      queue: [],
+      index: 0,
+      timer: 0,
+    },
+    save: {
+      exists: false,
+      loaded: false,
+      lastSavedAt: null,
+      toast: null,
     },
   };
 
@@ -303,6 +324,80 @@ export function initializeGame() {
     const id = nextIds[kind];
     nextIds[kind] += 1;
     return id;
+  }
+
+  function setSaveToast(text) {
+    state.save.toast = { text, ttl: 1.8 };
+  }
+
+  function persistProgress(forceCompleted = false) {
+    try {
+      const payload = {
+        missionIndex: state.mission.index,
+        stageIndex: state.mission.stageIndex,
+        money: state.player.money,
+        checkpoint: state.player.checkpoint,
+        completed: forceCompleted || state.mission.completed,
+        timestamp: Date.now(),
+      };
+      localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
+      state.save.exists = true;
+      state.save.lastSavedAt = payload.timestamp;
+      setSaveToast(payload.completed ? "OPERATION ARCHIVED" : "AUTO-SAVED");
+    } catch {}
+  }
+
+  function loadProgress() {
+    try {
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (!raw) return null;
+      const data = JSON.parse(raw);
+      if (!data || typeof data !== "object") return null;
+      if (typeof data.money === "number") state.player.money = Math.max(0, data.money);
+      if (data.checkpoint && typeof data.checkpoint.x === "number" && typeof data.checkpoint.y === "number") {
+        state.player.checkpoint = { x: data.checkpoint.x, y: data.checkpoint.y };
+        state.player.x = data.checkpoint.x;
+        state.player.y = data.checkpoint.y;
+      }
+      state.save.exists = true;
+      state.save.loaded = true;
+      state.save.lastSavedAt = typeof data.timestamp === "number" ? data.timestamp : null;
+      return data;
+    } catch {
+      return null;
+    }
+  }
+
+  function clearSavedProgress() {
+    try {
+      localStorage.removeItem(SAVE_KEY);
+      state.save.exists = false;
+      state.save.loaded = false;
+      state.save.lastSavedAt = null;
+    } catch {}
+  }
+
+  function startDialogue(title, lines) {
+    if (!lines?.length) return;
+    state.dialogue.active = true;
+    state.dialogue.title = title;
+    state.dialogue.queue = lines.map((line) => ({ speaker: line.speaker || "Radio", text: line.text || "" }));
+    state.dialogue.index = 0;
+    state.dialogue.timer = 1.8;
+    audio.playUiBlip();
+  }
+
+  function advanceDialogue() {
+    if (!state.dialogue.active) return;
+    state.dialogue.index += 1;
+    if (state.dialogue.index >= state.dialogue.queue.length) {
+      state.dialogue.active = false;
+      state.dialogue.queue = [];
+      state.dialogue.timer = 0;
+      return;
+    }
+    state.dialogue.timer = 1.8;
+    audio.playUiBlip();
   }
 
   function getVehicle(id) {
@@ -343,6 +438,10 @@ export function initializeGame() {
     return target;
   }
 
+  function missionPoint(x, y, searchRadius = 220, padding = 22) {
+    return findAccessiblePoint(state.world, x, y, searchRadius, 28, padding);
+  }
+
   function bootstrapWorldPopulation() {
     const colors = [
       makePaint("#d84c4c", "#834343"),
@@ -354,7 +453,7 @@ export function initializeGame() {
       makePaint("#52bcb4", "#325b59"),
     ];
 
-    for (let i = 0; i < 82; i += 1) {
+    for (let i = 0; i < CONFIG.trafficCount; i += 1) {
       const path = state.world.carPaths[i % state.world.carPaths.length];
       const a = path[0];
       const b = path[1];
@@ -371,7 +470,7 @@ export function initializeGame() {
       vehicle.pathIndex = 1;
     }
 
-    for (let i = 0; i < 18; i += 1) {
+    for (let i = 0; i < CONFIG.policeCarCount; i += 1) {
       const path = state.world.carPaths[(i * 3) % state.world.carPaths.length];
       const a = path[0];
       const b = path[1];
@@ -388,7 +487,7 @@ export function initializeGame() {
     starter.health = 140;
     state.mission.starterVehicleId = starter.id;
 
-    for (let i = 0; i < 200; i += 1) {
+    for (let i = 0; i < CONFIG.civilianCount; i += 1) {
       const node = state.world.navNodes[Math.floor(rng() * state.world.navNodes.length)];
       const civilian = buildCivilian(nextId("civilian"), node.x + (rng() - 0.5) * 60, node.y + (rng() - 0.5) * 60, rng);
       civilian.targetNode = state.world.navNodes[Math.floor(rng() * state.world.navNodes.length)];
@@ -448,6 +547,21 @@ export function initializeGame() {
     return { dist, steer, throttle, brake };
   }
 
+  function ensureNavRoute(entity, tx, ty, refreshSeconds = 0.9) {
+    if (!entity.navPath.length || entity.navIndex >= entity.navPath.length || state.time >= entity.navReplanAt) {
+      entity.navPath = planNavRoute(state.world, entity.x, entity.y, tx, ty);
+      entity.navIndex = 0;
+      entity.navReplanAt = state.time + refreshSeconds;
+    }
+    return entity.navPath[entity.navIndex] || { x: tx, y: ty };
+  }
+
+  function advanceNavPoint(entity, reach = 42) {
+    const node = entity.navPath[entity.navIndex];
+    if (!node) return;
+    if (Math.hypot(node.x - entity.x, node.y - entity.y) < reach) entity.navIndex += 1;
+  }
+
   function setMissionToast(text, good = true) {
     state.mission.toast = { text, ttl: 2.8, good };
   }
@@ -504,7 +618,8 @@ export function initializeGame() {
 
     if (stage.spawnVehicle) {
       const anchor = state.world.missionAnchors[stage.spawnVehicle.anchor];
-      const vehicle = spawnVehicle("traffic", stage.spawnVehicle.classId, anchor.x + stage.spawnVehicle.offsetX, anchor.y + stage.spawnVehicle.offsetY, -Math.PI * 0.35, makePaint(stage.spawnVehicle.color, "#534634"));
+      const spawn = missionPoint(anchor.x + stage.spawnVehicle.offsetX, anchor.y + stage.spawnVehicle.offsetY, 180, 26);
+      const vehicle = spawnVehicle("traffic", stage.spawnVehicle.classId, spawn.x, spawn.y, -Math.PI * 0.35, makePaint(stage.spawnVehicle.color, "#534634"));
       state.mission.starterVehicleId = vehicle.id;
       state.mission.marker = { x: vehicle.x, y: vehicle.y, radius: 80 };
     }
@@ -513,20 +628,23 @@ export function initializeGame() {
       for (let i = 0; i < stage.targetCount; i += 1) {
         const angle = (Math.PI * 2 * i) / stage.targetCount;
         const distance = 80 + i * 18;
-        spawnTarget(anchor.x + Math.cos(angle) * distance, anchor.y + Math.sin(angle) * distance, i % 2 === 0 ? "crate" : "fuel");
+        const point = missionPoint(anchor.x + Math.cos(angle) * distance, anchor.y + Math.sin(angle) * distance, 180, 24);
+        spawnTarget(point.x, point.y, i % 2 === 0 ? "crate" : "fuel");
       }
     }
     if (stage.enemyCount) {
       const anchor = state.world.missionAnchors[stage.anchor || "harbor"];
       for (let i = 0; i < stage.enemyCount; i += 1) {
-        const hostile = spawnHostile(anchor.x + (rng() - 0.5) * 220, anchor.y + (rng() - 0.5) * 220);
+        const point = missionPoint(anchor.x + (rng() - 0.5) * 220, anchor.y + (rng() - 0.5) * 220, 220, 18);
+        const hostile = spawnHostile(point.x, point.y);
         hostile.anchorX = anchor.x;
         hostile.anchorY = anchor.y;
       }
     }
     if (stage.spawnChase) {
       const anchor = state.world.missionAnchors[stage.spawnChase.anchor];
-      const target = spawnVehicle("traffic", stage.spawnChase.classId, anchor.x, anchor.y, 0, makePaint(stage.spawnChase.color, "#3f5867"), state.world.carPaths[10]);
+      const point = missionPoint(anchor.x, anchor.y, 220, 26);
+      const target = spawnVehicle("traffic", stage.spawnChase.classId, point.x, point.y, 0, makePaint(stage.spawnChase.color, "#3f5867"), state.world.carPaths[10]);
       target.state = "missionChase";
       target.health = 150;
       state.mission.chaseVehicleId = target.id;
@@ -536,7 +654,8 @@ export function initializeGame() {
     }
     if (stage.type === "spawnVehicleObjective") {
       const anchor = state.world.missionAnchors[stage.anchor];
-      const vehicle = spawnVehicle("traffic", stage.vehicleClassId, anchor.x + 50, anchor.y + 40, -Math.PI * 0.35, makePaint(stage.vehicleColor, "#4b4030"));
+      const spawn = missionPoint(anchor.x + 50, anchor.y + 40, 220, 28);
+      const vehicle = spawnVehicle("traffic", stage.vehicleClassId, spawn.x, spawn.y, -Math.PI * 0.35, makePaint(stage.vehicleColor, "#4b4030"));
       vehicle.health = 220;
       vehicle.state = "parked";
       state.mission.objectiveVehicleId = vehicle.id;
@@ -546,6 +665,15 @@ export function initializeGame() {
       state.wanted = Math.max(state.wanted, stage.wanted);
       state.police.lastCrimeTime = state.time;
     }
+
+    const dialogueLines = [];
+    if (index === 0 && state.mission.current?.briefing && state.mission.briefedMissionId !== state.mission.current.id) {
+      dialogueLines.push(...state.mission.current.briefing);
+      state.mission.briefedMissionId = state.mission.current.id;
+    }
+    if (stage.dialogue?.length) dialogueLines.push(...stage.dialogue);
+    if (dialogueLines.length) startDialogue(state.mission.current?.name || "Mission", dialogueLines);
+    if (state.mission.current && (state.mode === "playing" || state.save.loaded || state.mission.index > 0 || index > 0)) persistProgress(false);
   }
 
   function completeMissionStage() {
@@ -565,6 +693,7 @@ export function initializeGame() {
         state.mission.stage = null;
         state.mission.stageLabel = "All missions cleared";
         state.mission.marker = null;
+        persistProgress(true);
       } else {
         state.mission.current = state.mission.missions[state.mission.index];
         startMissionStage(0);
@@ -588,7 +717,23 @@ export function initializeGame() {
   }
 
   state.wanted = 0;
-  startMissionStage(0);
+  const savedProgress = loadProgress();
+  if (savedProgress?.completed) {
+    state.mission.index = state.mission.missions.length;
+    state.mission.current = null;
+    state.mission.stage = null;
+    state.mission.stageLabel = "All missions cleared";
+    state.mission.completed = true;
+    state.mission.marker = null;
+  } else if (savedProgress && typeof savedProgress.missionIndex === "number") {
+    const missionIndex = clamp(Math.floor(savedProgress.missionIndex), 0, state.mission.missions.length - 1);
+    state.mission.index = missionIndex;
+    state.mission.current = state.mission.missions[missionIndex];
+    const stageIndex = clamp(Math.floor(savedProgress.stageIndex || 0), 0, state.mission.current.stages.length - 1);
+    startMissionStage(stageIndex);
+  } else {
+    startMissionStage(0);
+  }
 
   function playerAnchor() {
     if (state.player.inCarId) {
@@ -701,7 +846,7 @@ export function initializeGame() {
       fireBullet("player", state.player.x + Math.cos(state.player.facing) * 16, state.player.y + Math.sin(state.player.facing) * 16, state.player.facing, state.player.vx, state.player.vy);
       noteCrime(0.04);
     }
-    if (input.pressed.has("KeyE")) {
+    if (input.pressed.has("KeyE") || input.pressed.has("KeyB")) {
       const vehicle = nearestVehicleForEntry();
       if (vehicle) enterVehicle(vehicle);
     }
@@ -726,7 +871,7 @@ export function initializeGame() {
       fireBullet("player", vehicle.x + Math.cos(vehicle.angle) * (vehicle.length * 0.5 + 8), vehicle.y + Math.sin(vehicle.angle) * (vehicle.length * 0.5 + 8), vehicle.angle, vehicle.vx, vehicle.vy);
       noteCrime(0.05);
     }
-    if (input.pressed.has("KeyE") && Math.abs(vehicle.forwardSpeed) < 42) {
+    if ((input.pressed.has("KeyE") || input.pressed.has("KeyB")) && Math.abs(vehicle.forwardSpeed) < 42) {
       exitVehicle(vehicle);
     }
   }
@@ -791,26 +936,32 @@ export function initializeGame() {
     }
 
     if (vehicle.state === "contain" && vehicle.deployedOfficers.length) {
-      const node = nearestNavNode(state.world, anchor.x + dir.x * 160, anchor.y + dir.y * 160);
-      const control = driveToward(vehicle, node?.x || anchor.x, node?.y || anchor.y, 0.82);
+      const node = nearestNavNode(state.world, anchor.x + dir.x * 160, anchor.y + dir.y * 160) || anchor;
+      const navTarget = ensureNavRoute(vehicle, node.x, node.y, 0.8);
+      const control = driveToward(vehicle, navTarget.x, navTarget.y, 0.82);
       applyVehiclePhysics(vehicle, control.throttle, control.steer, control.brake, dt);
+      advanceNavPoint(vehicle, 54);
       return;
     }
 
     if (canSee || distance < 760) {
       vehicle.state = "intercept";
       const interceptNode = nearestNavNode(state.world, anchor.x + dir.x * 220, anchor.y + dir.y * 220) || anchor;
-      const control = driveToward(vehicle, interceptNode.x, interceptNode.y, 1.05);
+      const navTarget = ensureNavRoute(vehicle, interceptNode.x, interceptNode.y, 0.65);
+      const control = driveToward(vehicle, navTarget.x, navTarget.y, 1.05);
       if (distance < 160) control.brake = Math.max(control.brake, 0.8);
       applyVehiclePhysics(vehicle, control.throttle, control.steer, control.brake, dt);
+      advanceNavPoint(vehicle, 52);
       return;
     }
 
     vehicle.state = "search";
     const search = vehicle.lastSeenPlayer || state.police.searchOrigin || anchor;
     const node = nearestNavNode(state.world, search.x, search.y) || search;
-    const control = driveToward(vehicle, node.x, node.y, 0.9);
+    const navTarget = ensureNavRoute(vehicle, node.x, node.y, 1.1);
+    const control = driveToward(vehicle, navTarget.x, navTarget.y, 0.9);
     applyVehiclePhysics(vehicle, control.throttle, control.steer, control.brake, dt);
+    advanceNavPoint(vehicle, 56);
   }
 
   function updateCivilian(civilian, dt) {
@@ -949,6 +1100,13 @@ export function initializeGame() {
         targetX = car.x;
         targetY = car.y;
       }
+    }
+
+    if (!los || officer.state === "flank" || officer.state === "return") {
+      const navTarget = ensureNavRoute(officer, targetX, targetY, 0.6);
+      targetX = navTarget.x;
+      targetY = navTarget.y;
+      advanceNavPoint(officer, 30);
     }
 
     const dx = targetX - officer.x;
@@ -1130,12 +1288,22 @@ export function initializeGame() {
     if (!moving && cooldownOver && !recentlyShot) state.player.health = Math.min(100, state.player.health + CONFIG.healthRegenRate * dt);
   }
 
+  function updateDialogue(dt) {
+    if (!state.dialogue.active) return;
+    state.dialogue.timer -= dt;
+    if (state.dialogue.timer <= 0) advanceDialogue();
+  }
+
   function updateMission(dt) {
     const stage = state.mission.stage;
     if (!stage) return;
     if (state.mission.toast) {
       state.mission.toast.ttl -= dt;
       if (state.mission.toast.ttl <= 0) state.mission.toast = null;
+    }
+    if (state.save.toast) {
+      state.save.toast.ttl -= dt;
+      if (state.save.toast.ttl <= 0) state.save.toast = null;
     }
     if (stage.duration || stage.timeLimit) {
       state.mission.timer -= dt;
@@ -1210,31 +1378,32 @@ export function initializeGame() {
   }
 
   function updateGame(dt) {
-    state.time += dt;
-    if (state.player.inCarId) updatePlayerInCar(dt);
-    else updatePlayerOnFoot(dt);
+    const simDt = dt * CONFIG.paceScale;
+    state.time += simDt;
+    if (state.player.inCarId) updatePlayerInCar(simDt);
+    else updatePlayerOnFoot(simDt);
 
     for (const vehicle of state.vehicles) {
       if (vehicle.id === state.player.inCarId) continue;
-      if (vehicle.kind === "police") updatePoliceVehicle(vehicle, dt);
+      if (vehicle.kind === "police") updatePoliceVehicle(vehicle, simDt);
       else if (vehicle.state === "missionChase" && state.mission.chaseEnd) {
         const control = driveToward(vehicle, state.mission.chaseEnd.x, state.mission.chaseEnd.y, 1);
-        applyVehiclePhysics(vehicle, control.throttle, control.steer, control.brake, dt);
-      } else updateTrafficVehicle(vehicle, dt);
+        applyVehiclePhysics(vehicle, control.throttle, control.steer, control.brake, simDt);
+      } else updateTrafficVehicle(vehicle, simDt);
     }
 
-    for (const civilian of state.civilians) updateCivilian(civilian, dt);
-    for (const hostile of state.hostiles) updateHostile(hostile, dt);
-    for (const officer of [...state.police.officers]) updateOfficer(officer, dt);
-    updateBullets(dt);
+    for (const civilian of state.civilians) updateCivilian(civilian, simDt);
+    for (const hostile of state.hostiles) updateHostile(hostile, simDt);
+    for (const officer of [...state.police.officers]) updateOfficer(officer, simDt);
+    updateBullets(simDt);
     handleCollisions();
-    updateMission(dt);
-    updateWanted(dt);
+    updateMission(simDt);
+    updateWanted(simDt);
     updatePoliceReinforcements();
-    updateHealthRegen(dt);
-    updateCamera(dt);
+    updateHealthRegen(simDt);
+    updateCamera(simDt);
     updateHud();
-    audio.update({ speed: playerSpeed(), wanted: state.wanted });
+    audio.update({ speed: playerSpeed(), wanted: state.wanted, districtId: findDistrict(state.world, state.player.x, state.player.y).id });
     input.pressed.clear();
   }
 
@@ -1251,10 +1420,17 @@ export function initializeGame() {
     audio.unlock();
     state.mode = "playing";
     startOverlay.classList.add("hidden");
+    if (!state.save.exists && state.mission.current) persistProgress(false);
+    if (state.save.exists) setSaveToast(state.save.loaded ? "SAVE RESTORED" : "SAVE READY");
     render();
   }
 
   function handleKeyDown(event) {
+    if (state.dialogue.active && ["Enter", "Space"].includes(event.code)) {
+      advanceDialogue();
+      event.preventDefault();
+      return;
+    }
     if (!input.keys.has(event.code)) input.pressed.add(event.code);
     input.keys.add(event.code);
     audio.unlock();
@@ -1279,7 +1455,12 @@ export function initializeGame() {
     if (state.mode === "playing" && !state.paused) {
       state.accumulator += delta;
       while (state.accumulator >= CONFIG.fixedDt) {
-        updateGame(CONFIG.fixedDt);
+        if (state.dialogue.active) {
+          updateDialogue(CONFIG.fixedDt * CONFIG.paceScale);
+          input.pressed.clear();
+        } else {
+          updateGame(CONFIG.fixedDt);
+        }
         state.accumulator -= CONFIG.fixedDt;
       }
     }
@@ -1323,6 +1504,17 @@ export function initializeGame() {
         routeRemaining: state.mission.runtime.checkpointKeys || [],
         objectiveVehicleId: state.mission.objectiveVehicleId,
       } : { complete: true },
+      dialogue: state.dialogue.active ? {
+        title: state.dialogue.title,
+        index: state.dialogue.index,
+        speaker: state.dialogue.queue[state.dialogue.index]?.speaker,
+        text: state.dialogue.queue[state.dialogue.index]?.text,
+      } : null,
+      save: {
+        exists: state.save.exists,
+        loaded: state.save.loaded,
+        lastSavedAt: state.save.lastSavedAt,
+      },
       police: {
         pressure: Number(state.police.pressure.toFixed(2)),
         officers: state.police.officers.slice(0, 8).map((officer) => ({ x: Number(officer.x.toFixed(1)), y: Number(officer.y.toFixed(1)), state: officer.state })),
@@ -1337,7 +1529,10 @@ export function initializeGame() {
   window.advanceTime = (ms) => {
     const steps = Math.max(1, Math.round(ms / (1000 / 60)));
     for (let i = 0; i < steps; i += 1) {
-      if (state.mode === "playing" && !state.paused) updateGame(CONFIG.fixedDt);
+      if (state.mode === "playing" && !state.paused) {
+        if (state.dialogue.active) updateDialogue(CONFIG.fixedDt * CONFIG.paceScale);
+        else updateGame(CONFIG.fixedDt);
+      }
     }
     render();
   };
@@ -1347,8 +1542,10 @@ export function initializeGame() {
   window.addEventListener("resize", resizeAndRender);
   window.addEventListener("fullscreenchange", resizeAndRender);
   startButton.addEventListener("click", unlockAudioAndStart);
+  window.clearSavedProgress = clearSavedProgress;
 
   document.querySelector(".panel ul").innerHTML = START_SCREEN_LINES.map((line) => `<li>${line}</li>`).join("");
+  if (state.save.exists) startButton.textContent = "Continue Operation";
   resizeCanvas();
   updateHud();
   render();

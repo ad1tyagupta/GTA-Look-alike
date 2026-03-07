@@ -27,12 +27,21 @@ Original prompt: develop a GTA style game where the camera is on top. A player c
 - Added mission runtime state so timed-route checkpoints no longer mutate mission source data across retries.
 - Upgraded police escalation with more roadblocks, reinforcement spawning by district, broader intercept/search behavior, and slightly slower officer top speed so the player remains faster on foot.
 - Overhauled the render style again with district-wide ground treatment, stronger road composition, new prop rendering, richer building facades, more detailed vehicles, and a more intentional HUD/start-screen treatment.
+- Increased overall game pace to roughly `1.2x` by scaling simulation speed, keeping movement/combat/police timing in the same relative rhythm while making the city feel faster.
+- Increased civilian density again and surfaced more street life across the city.
+- Added mission dialogue/cutscene beats with cinematic bars, auto-advance, and `Enter`/`Space` skip support.
+- Added stage-based autosave/load progression with `localStorage`, restoring money/checkpoint/current mission stage on revisit.
+- Tightened police navigation using planned node routes instead of direct beelines for search/intercept/flank behavior.
+- Added district-specific ambient audio layers and UI blips through the Web Audio system.
+- Fixed mission geometry bugs by sanitizing all mission anchors to reachable spaces, moving landmark footprints off roads, filtering road-overlap buildings out of the generated city, and sanitizing dynamic mission spawns (targets, enemies, chase vehicles, objective vehicles).
+- Restored `B` as a fallback enter/exit vehicle key so the existing automated action payloads remain usable alongside `E`.
 
 ## TODO
-- Add mission-specific cutscene/dialog beats so stage transitions feel authored instead of purely HUD-driven.
-- Improve AI navigation around dense building corners for police-on-foot and hostile flanking.
-- Add more localized ambient audio layers per district (traffic wash, dock ambience, crowd beds).
-- Add save/load progression for money and completed missions.
+- Add longer multi-line stage dialogue for later missions so the mid/final acts feel less terse than the opener.
+- Improve AI navigation around dense building corners for hostiles, not just police.
+- Add more concrete ambient event cues per district (rail clanks, harbor foghorns, downtown crowd swells).
+- Add an explicit "New Game / Continue" menu split and a visible manual clear-save option in the UI.
+- Replace the stale test action payloads so they explicitly skip dialogue and use the current intended control mapping.
 
 ## Test Runs
 - `node --check game.js` passed.
@@ -56,3 +65,29 @@ Original prompt: develop a GTA style game where the camera is on top. A player c
     - `output/web-game/overhaul-smoke/shot-0.png`
     - `output/web-game/overhaul-police/shot-0.png`
     - `output/web-game/overhaul-drive/shot-0.png`
+- Pace/dialogue/save/police validation on March 7, 2026:
+  - `node $WEB_GAME_CLIENT --url http://127.0.0.1:5174/index.html --click-selector "#start-btn" --actions-json '{"steps":[{"buttons":[],"frames":30}]}' --iterations 1 --pause-ms 120 --screenshot-dir output/web-game/dialogue-overlay`
+  - `node $WEB_GAME_CLIENT --url http://127.0.0.1:5174/index.html --click-selector "#start-btn" --actions-file test-actions/police-pressure.json --iterations 1 --pause-ms 220 --screenshot-dir output/web-game/police-tightened`
+  - `node $WEB_GAME_CLIENT --url http://127.0.0.1:5174/index.html --click-selector "#start-btn" --actions-file test-actions/on-foot-roam.json --iterations 1 --pause-ms 240 --screenshot-dir output/web-game/final-roam`
+  - Reviewed screenshots:
+    - `output/web-game/dialogue-overlay/shot-0.png`
+    - `output/web-game/police-tightened/shot-0.png`
+    - `output/web-game/final-roam/shot-0.png`
+  - Reviewed state payloads:
+    - `output/web-game/dialogue-overlay/state-0.json`
+    - `output/web-game/police-tightened/state-0.json`
+    - `output/web-game/final-roam/state-0.json`
+- Mission geometry bug validation on March 7, 2026:
+  - Static audits:
+    - road/building overlap check via `createWorld(...)`: `roadBuildingOverlaps 0`
+    - mission anchor reachability audit across all mission stages: all clear
+    - dynamic mission spawn audit via `findAccessiblePoint(...)`: `missionSpawnFailures 0`
+  - Browser runs:
+    - `node $WEB_GAME_CLIENT --url http://127.0.0.1:5174/index.html --click-selector "#start-btn" --actions-json '{"steps":[{"buttons":["space"],"frames":2},{"buttons":["space"],"frames":2},{"buttons":["space"],"frames":2},{"buttons":["right","down"],"frames":18},{"buttons":[],"frames":4},{"buttons":["b"],"frames":2},{"buttons":[],"frames":12}]}' --iterations 1 --pause-ms 180 --screenshot-dir output/web-game/mission-stage-advance`
+    - `node $WEB_GAME_CLIENT --url http://127.0.0.1:5174/index.html --click-selector "#start-btn" --actions-file test-actions/car-drive-exit.json --iterations 1 --pause-ms 240 --screenshot-dir output/web-game/mission-fix-drive-2`
+  - Reviewed screenshots:
+    - `output/web-game/mission-stage-advance/shot-0.png`
+    - `output/web-game/mission-fix-drive-2/shot-0.png`
+  - Reviewed state payloads:
+    - `output/web-game/mission-stage-advance/state-0.json`
+    - `output/web-game/mission-fix-drive-2/state-0.json`

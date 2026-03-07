@@ -24,6 +24,10 @@ function addNode(nodes, x, y, kind = "intersection") {
   nodes.push({ x, y, kind });
 }
 
+function pointInRect(x, y, rect, padding = 0) {
+  return x >= rect.x - padding && x <= rect.x + rect.w + padding && y >= rect.y - padding && y <= rect.y + rect.h + padding;
+}
+
 function pushCarLoops(paths, x1, y1, x2, y2, orientation, laneOffset) {
   if (orientation === "horizontal") {
     paths.push([
@@ -144,10 +148,10 @@ function buildDistrictBlocks(rng, district, verticalRoads, horizontalRoads, buil
 
   const residentialLandmark = landmarks.mallSquare;
   buildings.push({
-    x: residentialLandmark.x - 170,
-    y: residentialLandmark.y - 120,
-    w: 340,
-    h: 240,
+    x: 1260,
+    y: 1940,
+    w: 300,
+    h: 220,
     type: "mall",
     style: BUILDING_STYLES.mall,
     districtId: "residential",
@@ -161,10 +165,10 @@ function buildDistrictBlocks(rng, district, verticalRoads, horizontalRoads, buil
 
   const downtownLandmark = landmarks.civicPlaza;
   buildings.push({
-    x: downtownLandmark.x - 210,
-    y: downtownLandmark.y - 170,
-    w: 420,
-    h: 340,
+    x: 3810,
+    y: 1280,
+    w: 250,
+    h: 230,
     type: "plaza",
     style: BUILDING_STYLES.office,
     districtId: "downtown",
@@ -178,10 +182,10 @@ function buildDistrictBlocks(rng, district, verticalRoads, horizontalRoads, buil
 
   const industrialLandmark = landmarks.harbor;
   buildings.push({
-    x: industrialLandmark.x - 250,
-    y: industrialLandmark.y - 180,
-    w: 500,
-    h: 360,
+    x: 7060,
+    y: 3330,
+    w: 430,
+    h: 240,
     type: "dock",
     style: BUILDING_STYLES.dock,
     districtId: "industrial",
@@ -259,11 +263,25 @@ export function createWorld(rng) {
   props.push({ type: "parkingLot", x: 5140, y: 4140, w: 380, h: 260, districtId: "downtown" });
   props.push({ type: "parkingLot", x: 7200, y: 1960, w: 460, h: 320, districtId: "industrial" });
 
+  const cleanedBuildings = buildings.filter((building) => {
+    for (const road of roads) {
+      const overlap = building.x < road.x + road.w && building.x + building.w > road.x && building.y < road.y + road.h && building.y + building.h > road.y;
+      if (overlap) return false;
+    }
+    return true;
+  });
+
+  const accessibilityWorld = { width: CONFIG.worldWidth, height: CONFIG.worldHeight, buildings: cleanedBuildings, props, roads };
+  for (const [key, anchor] of Object.entries(missionAnchors)) {
+    const accessible = findAccessiblePoint(accessibilityWorld, anchor.x, anchor.y, 480, 30, 24);
+    missionAnchors[key] = { ...anchor, x: Math.round(accessible.x), y: Math.round(accessible.y) };
+  }
+
   return {
     width: CONFIG.worldWidth,
     height: CONFIG.worldHeight,
     roads,
-    buildings,
+    buildings: cleanedBuildings,
     props,
     crosswalks,
     carPaths,
@@ -293,6 +311,75 @@ export function nearestNavNode(world, x, y, filterKind = null) {
     }
   }
   return best;
+}
+
+export function isPointBlocked(world, x, y, padding = 20) {
+  if (x < padding || y < padding || x > world.width - padding || y > world.height - padding) return true;
+  const insideRunway = world.props.some((prop) => prop.type === "runway" && pointInRect(x, y, prop, 0));
+  if (insideRunway) return false;
+  for (const building of world.buildings) {
+    if (pointInRect(x, y, building, padding)) return true;
+  }
+  for (const prop of world.props) {
+    if ((prop.type === "dockWater" || prop.type === "fenceLot" || prop.type === "container" || prop.type === "billboard") && pointInRect(x, y, prop, padding)) return true;
+    if (prop.type === "tree" && Math.hypot(x - prop.x, y - prop.y) < prop.r + padding) return true;
+  }
+  return false;
+}
+
+function accessibilityScore(world, x, y, originX, originY) {
+  let score = -Math.hypot(x - originX, y - originY) * 0.02;
+  for (const road of world.roads) {
+    if (pointInRect(x, y, road, 12)) score += road.type === "alley" ? 4 : 7;
+  }
+  for (const prop of world.props) {
+    if ((prop.type === "parkingLot" || prop.type === "plazaPatch" || prop.type === "parkPatch") && pointInRect(x, y, prop, 8)) score += 6;
+  }
+  return score;
+}
+
+export function findAccessiblePoint(world, originX, originY, searchRadius = 420, step = 34, padding = 20) {
+  if (!isPointBlocked(world, originX, originY, padding)) return { x: originX, y: originY };
+  let best = null;
+  let bestScore = -Infinity;
+  for (let radius = step; radius <= searchRadius; radius += step) {
+    const samples = Math.max(12, Math.floor((Math.PI * 2 * radius) / step));
+    for (let i = 0; i < samples; i += 1) {
+      const angle = (Math.PI * 2 * i) / samples;
+      const x = originX + Math.cos(angle) * radius;
+      const y = originY + Math.sin(angle) * radius;
+      if (isPointBlocked(world, x, y, padding)) continue;
+      const score = accessibilityScore(world, x, y, originX, originY);
+      if (score > bestScore) {
+        bestScore = score;
+        best = { x, y };
+      }
+    }
+    if (best) return best;
+  }
+  return { x: originX, y: originY };
+}
+
+function matchingIntersection(world, x, y) {
+  return world.navNodes.find((node) => node.kind === "intersection" && Math.abs(node.x - x) < 1 && Math.abs(node.y - y) < 1) || null;
+}
+
+export function planNavRoute(world, fromX, fromY, toX, toY) {
+  const start = nearestNavNode(world, fromX, fromY, "intersection") || nearestNavNode(world, fromX, fromY);
+  const end = nearestNavNode(world, toX, toY, "intersection") || nearestNavNode(world, toX, toY);
+  if (!start || !end) return [];
+  const route = [];
+  const turnA = matchingIntersection(world, end.x, start.y);
+  const turnB = matchingIntersection(world, start.x, end.y);
+  const mid =
+    turnA && turnB
+      ? (Math.abs(fromX - turnA.x) + Math.abs(toY - turnA.y) < Math.abs(fromY - turnB.y) + Math.abs(toX - turnB.x) ? turnA : turnB)
+      : turnA || turnB;
+  if (Math.hypot(start.x - fromX, start.y - fromY) > 46) route.push({ x: start.x, y: start.y });
+  if (mid && (mid.x !== start.x || mid.y !== start.y) && (mid.x !== end.x || mid.y !== end.y)) route.push({ x: mid.x, y: mid.y });
+  if (Math.hypot(end.x - toX, end.y - toY) > 46) route.push({ x: end.x, y: end.y });
+  route.push({ x: toX, y: toY });
+  return route;
 }
 
 export function pickRoadblockSpot(world, x, y, dirX, dirY) {
