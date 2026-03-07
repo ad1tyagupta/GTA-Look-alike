@@ -21,12 +21,18 @@ Original prompt: develop a GTA style game where the camera is on top. A player c
 - Added minimap on bottom-right with player, police, mission marker, roads/buildings, and camera bounds.
 - Added richer rendering pass (textured terrain/roads, crosswalks, detailed vehicles, styled pedestrians, varied building archetypes, environmental props, shadows/highlights).
 - Updated HUD with money and active task text.
+- Refactored runtime into modular files under `src/` (`config`, `world`, `missions`, `render`, `audio`, `game-app`) with `game.js` as a thin entrypoint.
+- Expanded the authored city to `9600x6400` and pushed district identity further with more roads, alleys, landmarks, parking lots, medians, billboards, waterfront/runway space, and denser traffic/pedestrian population.
+- Replaced the short repeatable task loop with a 6-mission authored chain covering meet, pickup, timed delivery, convoy chase, sabotage, survive, steal-vehicle, and finale van-delivery stages.
+- Added mission runtime state so timed-route checkpoints no longer mutate mission source data across retries.
+- Upgraded police escalation with more roadblocks, reinforcement spawning by district, broader intercept/search behavior, and slightly slower officer top speed so the player remains faster on foot.
+- Overhauled the render style again with district-wide ground treatment, stronger road composition, new prop rendering, richer building facades, more detailed vehicles, and a more intentional HUD/start-screen treatment.
 
 ## TODO
-- Add additional mission archetypes (escort, timed chase, cargo pickup).
-- Improve AI pathfinding around dense building corners for police-on-foot.
-- Add audio (engine loops, sirens, gunfire, mission complete stingers).
-- Add save/load progression for money/task stage.
+- Add mission-specific cutscene/dialog beats so stage transitions feel authored instead of purely HUD-driven.
+- Improve AI navigation around dense building corners for police-on-foot and hostile flanking.
+- Add more localized ambient audio layers per district (traffic wash, dock ambience, crowd beds).
+- Add save/load progression for money and completed missions.
 
 ## Test Runs
 - `node --check game.js` passed.
@@ -41,3 +47,12 @@ Original prompt: develop a GTA style game where the camera is on top. A player c
 - Direct visual sanity check with Playwright screenshot:
   - `output/web-game/debug-current.png`
 - No `errors-*.json` files were produced in current runs (no captured console/page errors).
+- Overhaul validation on March 7, 2026:
+  - `python3 -m http.server 5181 --directory "/Users/adityagupta/Documents/Codex/Codex game test"`
+  - `node $WEB_GAME_CLIENT --url http://127.0.0.1:5181/index.html --actions-file test-actions/on-foot-roam.json --iterations 1 --pause-ms 200 --screenshot-dir output/web-game/overhaul-smoke`
+  - `node $WEB_GAME_CLIENT --url http://127.0.0.1:5181/index.html --actions-file test-actions/police-pressure.json --iterations 1 --pause-ms 220 --screenshot-dir output/web-game/overhaul-police`
+  - `node $WEB_GAME_CLIENT --url http://127.0.0.1:5181/index.html --actions-file test-actions/car-drive-exit.json --iterations 1 --pause-ms 220 --screenshot-dir output/web-game/overhaul-drive`
+  - Reviewed screenshots:
+    - `output/web-game/overhaul-smoke/shot-0.png`
+    - `output/web-game/overhaul-police/shot-0.png`
+    - `output/web-game/overhaul-drive/shot-0.png`
