@@ -37,14 +37,18 @@ Original prompt: develop a GTA style game where the camera is on top. A player c
 - Restored `B` as a fallback enter/exit vehicle key so the existing automated action payloads remain usable alongside `E`.
 - Rebalanced the default difficulty downward substantially: larger mission radii, longer timed windows, shorter survive stages, lower wanted spikes, more forgiving escape thresholds, fewer enemies/targets, weaker police pressure, and less punishing damage values.
 - Increased player survivability and mission clear speed by boosting player movement/firepower and lowering hostile, officer, and mission-object durability.
+- Added selectable `Normal` and `Easy` difficulty modes in the menu, with `Normal` preserving the current tuning and `Easy` pushing police, mission pressure, and damage down further.
+- Added a proper menu reset flow that clears saved progress and restarts from mission one.
+- Moved the HUD into corner-based canvas panels: cash top-left, mission strip top-center, minimap top-right, health bottom-left, and status bottom-right.
+- Changed health recovery to a combat-safe model: no regen during active pressure, then recovery starts only after 10 seconds away from threats and returns slowly.
 
 ## TODO
 - Add longer multi-line stage dialogue for later missions so the mid/final acts feel less terse than the opener.
 - Improve AI navigation around dense building corners for hostiles, not just police.
 - Add more concrete ambient event cues per district (rail clanks, harbor foghorns, downtown crowd swells).
-- Add an explicit "New Game / Continue" menu split and a visible manual clear-save option in the UI.
 - Replace the stale test action payloads so they explicitly skip dialogue and use the current intended control mapping.
 - Fix the `render_game_to_text()` startup mismatch during automated menu/dialogue entry; screenshots show live gameplay correctly, but the text payload can stay at `mode: "menu"` in those flows.
+- If desired, add a dedicated page-level screenshot harness for menu verification, because the current Playwright client captures the canvas and not the HTML start overlay.
 
 ## Test Runs
 - `node --check game.js` passed.
@@ -102,3 +106,17 @@ Original prompt: develop a GTA style game where the camera is on top. A player c
     - `output/web-game/easy-start/shot-0.png`
     - `output/web-game/easy-shoot/shot-0.png`
   - No `errors-*.json` files were produced in the difficulty runs.
+- Difficulty mode + HUD validation on March 8, 2026:
+  - `python3 -m http.server 5183 --directory "/Users/adityagupta/Documents/Codex/Codex game test"`
+  - `node $WEB_GAME_CLIENT --url http://127.0.0.1:5183/index.html --actions-json '{"steps":[{"buttons":[],"frames":2}]}' --iterations 1 --pause-ms 120 --screenshot-dir output/web-game/menu-layout-v2`
+  - `node $WEB_GAME_CLIENT --url http://127.0.0.1:5183/index.html --click-selector "#mode-easy" --actions-json '{"steps":[{"buttons":[],"frames":2}]}' --iterations 1 --pause-ms 120 --screenshot-dir output/web-game/menu-easy-v2`
+  - `node $WEB_GAME_CLIENT --url http://127.0.0.1:5183/index.html --click-selector "#mode-easy" --actions-json '{"steps":[{"buttons":["enter"],"frames":2},{"buttons":[],"frames":20},{"buttons":["enter"],"frames":2},{"buttons":[],"frames":20},{"buttons":["enter"],"frames":2},{"buttons":[],"frames":18}]}' --iterations 1 --pause-ms 180 --screenshot-dir output/web-game/gameplay-easy-clear-v2`
+  - Reviewed state payloads:
+    - `output/web-game/menu-layout-v2/state-0.json`
+    - `output/web-game/menu-easy-v2/state-0.json`
+    - `output/web-game/gameplay-easy-clear-v2/state-0.json`
+  - Reviewed screenshots:
+    - `output/web-game/menu-layout-v2/shot-0.png`
+    - `output/web-game/menu-easy-v2/shot-0.png`
+    - `output/web-game/gameplay-easy-clear-v2/shot-0.png`
+  - No `errors-*.json` files were produced in the mode/HUD runs.

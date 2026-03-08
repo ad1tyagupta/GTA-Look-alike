@@ -13,6 +13,13 @@
       <div class="panel">
         <h1>Blacktop Dominion</h1>
         <p>The city is open, the jobs keep escalating, and every mistake brings more heat. Keep your wheels moving and your exits clean.</p>
+        <div class="difficulty-picker" aria-label="Difficulty selection">
+          <span class="picker-label">Difficulty</span>
+          <div class="picker-buttons">
+            <button class="mode-btn active" id="mode-normal" data-difficulty="normal" type="button">Normal</button>
+            <button class="mode-btn" id="mode-easy" data-difficulty="easy" type="button">Easy</button>
+          </div>
+        </div>
         <ul>
           <li>Move on foot: WASD or Arrow Keys</li>
           <li>Shoot: Space</li>
@@ -21,7 +28,11 @@
           <li>Pause: P | Restart: R</li>
           <li>Toggle fullscreen: F</li>
         </ul>
-        <button id="start-btn" type="button">Start Operation</button>
+        <div class="menu-actions">
+          <button id="start-btn" type="button">Start Operation</button>
+          <button id="reset-btn" class="secondary-btn" type="button">Reset Progress</button>
+        </div>
+        <p class="menu-note" id="menu-note">Normal mode is selected. Reset starts again from mission one.</p>
       </div>
     </section>
     <section id="hud" class="hud">

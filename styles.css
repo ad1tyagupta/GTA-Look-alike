@@ -89,7 +89,33 @@ body {
   line-height: 1.45;
 }
 
-#start-btn {
+.difficulty-picker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  margin: 0 0 14px;
+  border: 1px solid rgba(223, 193, 117, 0.22);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.picker-label {
+  font-size: 0.88rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--subtle);
+}
+
+.picker-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.mode-btn,
+#start-btn,
+.secondary-btn {
   border: none;
   padding: 11px 16px;
   border-radius: 999px;
@@ -102,40 +128,50 @@ body {
   text-transform: uppercase;
 }
 
-#start-btn:hover {
+.mode-btn {
+  padding: 9px 14px;
+  font-size: 0.82rem;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  border: 1px solid rgba(223, 193, 117, 0.24);
+}
+
+.mode-btn.active {
+  background: linear-gradient(180deg, #f4dd9c, #dca94f);
+  color: #1b1e24;
+  border-color: transparent;
+}
+
+#start-btn:hover,
+.secondary-btn:hover,
+.mode-btn:hover {
   filter: brightness(1.05);
 }
 
-#start-btn:active {
+#start-btn:active,
+.secondary-btn:active,
+.mode-btn:active {
   transform: translateY(1px);
 }
 
-.hud {
-  position: absolute;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
+.menu-actions {
   display: flex;
+  gap: 10px;
   flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
-  width: min(96vw, 1160px);
-  font-size: clamp(0.64rem, 1.18vw, 0.9rem);
-  letter-spacing: 0.08em;
-  pointer-events: none;
-  user-select: none;
 }
 
-.hud span {
-  background: rgba(0, 0, 0, 0.42);
-  border: 1px solid rgba(222, 192, 123, 0.45);
-  padding: 5px 8px;
-  border-radius: 6px;
-  white-space: nowrap;
+.secondary-btn {
+  background: linear-gradient(180deg, rgba(79, 88, 97, 0.95), rgba(50, 58, 67, 0.95));
+  color: var(--text);
+  border: 1px solid rgba(223, 193, 117, 0.26);
 }
 
-#hud-task {
-  max-width: min(74vw, 620px);
-  overflow: hidden;
-  text-overflow: ellipsis;
+.menu-note {
+  margin: 12px 0 0;
+  font-size: 0.9rem;
+  color: var(--subtle);
+}
+
+.hud {
+  display: none;
 }

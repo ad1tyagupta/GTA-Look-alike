@@ -1,4 +1,4 @@
-import { CONFIG, START_SCREEN_LINES, VEHICLE_CLASSES } from "./config.js";
+import { CONFIG, DIFFICULTY_MODES, START_SCREEN_LINES, VEHICLE_CLASSES } from "./config.js";
 import { AudioSystem } from "./audio.js";
 import { MISSION_CHAIN } from "./missions.js";
 import { createRenderAssets, renderGame } from "./render.js";
@@ -139,15 +139,15 @@ function cloneStage(stage) {
   return JSON.parse(JSON.stringify(stage));
 }
 
-function rebalanceStageForDefaultDifficulty(stage) {
+function rebalanceStageForDifficulty(stage, profile) {
   if (!stage) return stage;
-  if (stage.radius) stage.radius = Math.round(stage.radius * 1.2);
-  if (stage.duration) stage.duration = Math.max(6, Math.round(stage.duration * 0.65));
-  if (stage.timeLimit) stage.timeLimit = Math.max(24, Math.round(stage.timeLimit * 1.45));
-  if (stage.enemyCount) stage.enemyCount = Math.max(1, Math.ceil(stage.enemyCount * 0.5));
-  if (stage.targetCount) stage.targetCount = Math.max(1, Math.ceil(stage.targetCount * 0.5));
-  if (stage.wanted) stage.wanted = Number((stage.wanted * 0.62).toFixed(2));
-  if (typeof stage.targetWanted === "number") stage.targetWanted = Math.min(0.8, Number((stage.targetWanted + 0.35).toFixed(2)));
+  if (stage.radius) stage.radius = Math.round(stage.radius * profile.stageRadiusMult);
+  if (stage.duration) stage.duration = Math.max(6, Math.round(stage.duration * profile.stageDurationMult));
+  if (stage.timeLimit) stage.timeLimit = Math.max(24, Math.round(stage.timeLimit * profile.stageTimeLimitMult));
+  if (stage.enemyCount) stage.enemyCount = Math.max(1, Math.ceil(stage.enemyCount * profile.enemyCountMult));
+  if (stage.targetCount) stage.targetCount = Math.max(1, Math.ceil(stage.targetCount * profile.targetCountMult));
+  if (stage.wanted) stage.wanted = Number((stage.wanted * profile.wantedScale).toFixed(2));
+  if (typeof stage.targetWanted === "number") stage.targetWanted = Math.min(0.8, Number((stage.targetWanted + profile.targetWantedBonus).toFixed(2)));
   return stage;
 }
 
@@ -244,10 +244,15 @@ function resolveDynamicCircle(a, b, restitution) {
 
 export function initializeGame() {
   const SAVE_KEY = "city-heat-save-v1";
+  const SETTINGS_KEY = "city-heat-settings-v1";
+  const DEFAULT_PLAYER_SPAWN = { x: 1040, y: 860 };
   const canvas = document.getElementById("game");
   const ctx = canvas.getContext("2d");
   const startOverlay = document.getElementById("start-overlay");
   const startButton = document.getElementById("start-btn");
+  const resetButton = document.getElementById("reset-btn");
+  const menuNote = document.getElementById("menu-note");
+  const difficultyButtons = [...document.querySelectorAll(".mode-btn")];
   const hudMode = document.getElementById("hud-mode");
   const hudHealth = document.getElementById("hud-health");
   const hudWanted = document.getElementById("hud-wanted");
@@ -267,8 +272,8 @@ export function initializeGame() {
     camera: { x: 0, y: 0, width: 1280, height: 720 },
     world: createWorld(rng),
     player: {
-      x: 1040,
-      y: 860,
+      x: DEFAULT_PLAYER_SPAWN.x,
+      y: DEFAULT_PLAYER_SPAWN.y,
       vx: 0,
       vy: 0,
       r: 12,
@@ -281,7 +286,8 @@ export function initializeGame() {
       nextShotAt: 0,
       lastShotTime: -9999,
       lastDamageTime: -9999,
-      checkpoint: { x: 1040, y: 860 },
+      lastCombatTime: -9999,
+      checkpoint: { x: DEFAULT_PLAYER_SPAWN.x, y: DEFAULT_PLAYER_SPAWN.y },
       hasPackage: false,
     },
     vehicles: [],
@@ -326,7 +332,11 @@ export function initializeGame() {
       exists: false,
       loaded: false,
       lastSavedAt: null,
+      data: null,
       toast: null,
+    },
+    settings: {
+      difficulty: "normal",
     },
   };
 
@@ -336,6 +346,40 @@ export function initializeGame() {
     const id = nextIds[kind];
     nextIds[kind] += 1;
     return id;
+  }
+
+  function difficultyProfile() {
+    return DIFFICULTY_MODES[state.settings.difficulty] || DIFFICULTY_MODES.normal;
+  }
+
+  function persistSettings() {
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ difficulty: state.settings.difficulty }));
+    } catch {}
+  }
+
+  function loadSettings() {
+    try {
+      const raw = localStorage.getItem(SETTINGS_KEY);
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      if (data?.difficulty && DIFFICULTY_MODES[data.difficulty]) state.settings.difficulty = data.difficulty;
+    } catch {}
+  }
+
+  function syncDifficultyButtons() {
+    for (const button of difficultyButtons) button.classList.toggle("active", button.dataset.difficulty === state.settings.difficulty);
+  }
+
+  function syncMenuUi() {
+    const profile = difficultyProfile();
+    startButton.textContent = state.save.exists ? "Continue Operation" : "Start Operation";
+    resetButton.textContent = state.save.exists ? "Reset Progress" : "Start New Run";
+    menuNote.textContent =
+      state.save.exists ?
+        `${profile.label} mode is selected. Continue resumes your operation; reset clears progress and starts from mission one.` :
+        `${profile.label} mode is selected. Start begins at mission one, and reset clears any archived progress.`;
+    syncDifficultyButtons();
   }
 
   function setSaveToast(text) {
@@ -349,11 +393,13 @@ export function initializeGame() {
         stageIndex: state.mission.stageIndex,
         money: state.player.money,
         checkpoint: state.player.checkpoint,
+        difficulty: state.settings.difficulty,
         completed: forceCompleted || state.mission.completed,
         timestamp: Date.now(),
       };
       localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
       state.save.exists = true;
+      state.save.data = payload;
       state.save.lastSavedAt = payload.timestamp;
       setSaveToast(payload.completed ? "OPERATION ARCHIVED" : "AUTO-SAVED");
     } catch {}
@@ -365,6 +411,7 @@ export function initializeGame() {
       if (!raw) return null;
       const data = JSON.parse(raw);
       if (!data || typeof data !== "object") return null;
+      if (data.difficulty && DIFFICULTY_MODES[data.difficulty]) state.settings.difficulty = data.difficulty;
       if (typeof data.money === "number") state.player.money = Math.max(0, data.money);
       if (data.checkpoint && typeof data.checkpoint.x === "number" && typeof data.checkpoint.y === "number") {
         state.player.checkpoint = { x: data.checkpoint.x, y: data.checkpoint.y };
@@ -373,6 +420,7 @@ export function initializeGame() {
       }
       state.save.exists = true;
       state.save.loaded = true;
+      state.save.data = data;
       state.save.lastSavedAt = typeof data.timestamp === "number" ? data.timestamp : null;
       return data;
     } catch {
@@ -385,6 +433,7 @@ export function initializeGame() {
       localStorage.removeItem(SAVE_KEY);
       state.save.exists = false;
       state.save.loaded = false;
+      state.save.data = null;
       state.save.lastSavedAt = null;
     } catch {}
   }
@@ -416,14 +465,44 @@ export function initializeGame() {
     return state.vehicles.find((vehicle) => vehicle.id === id) || null;
   }
 
+  function tuneVehicleForDifficulty(vehicle) {
+    const profile = difficultyProfile();
+    if (vehicle.kind === "police") {
+      vehicle.health = Math.round(vehicle.health * profile.policeVehicleHealthMult);
+      vehicle.maxForward *= profile.policeOfficerSpeedMult;
+      vehicle.engineAccel *= 0.9 + profile.policeOfficerSpeedMult * 0.1;
+    }
+    return vehicle;
+  }
+
+  function tuneOfficerForDifficulty(officer) {
+    const profile = difficultyProfile();
+    officer.health = Math.round(officer.health * profile.officerHealthMult);
+    return officer;
+  }
+
+  function tuneHostileForDifficulty(hostile) {
+    const profile = difficultyProfile();
+    hostile.health = Math.round(hostile.health * profile.hostileHealthMult);
+    return hostile;
+  }
+
+  function tuneTargetForDifficulty(target) {
+    const profile = difficultyProfile();
+    target.health = Math.max(1, Math.round(target.health * profile.targetHealthMult));
+    return target;
+  }
+
   function spawnVehicle(kind, classId, x, y, angle, paint, path = null) {
     const vehicle = buildVehicle(nextId("vehicle"), kind, classId, x, y, angle, paint, path);
+    tuneVehicleForDifficulty(vehicle);
     state.vehicles.push(vehicle);
     return vehicle;
   }
 
   function spawnOfficer(x, y, carId) {
     const officer = buildOfficer(nextId("officer"), x, y, carId);
+    tuneOfficerForDifficulty(officer);
     state.police.officers.push(officer);
     return officer;
   }
@@ -440,12 +519,14 @@ export function initializeGame() {
 
   function spawnHostile(x, y) {
     const hostile = buildHostile(nextId("hostile"), x, y);
+    tuneHostileForDifficulty(hostile);
     state.hostiles.push(hostile);
     return hostile;
   }
 
   function spawnTarget(x, y, kind = "crate") {
     const target = buildMissionTarget(nextId("target"), x, y, kind);
+    tuneTargetForDifficulty(target);
     state.mission.targets.push(target);
     return target;
   }
@@ -455,6 +536,7 @@ export function initializeGame() {
   }
 
   function bootstrapWorldPopulation() {
+    const profile = difficultyProfile();
     const colors = [
       makePaint("#d84c4c", "#834343"),
       makePaint("#e2b54f", "#7d6742"),
@@ -482,7 +564,8 @@ export function initializeGame() {
       vehicle.pathIndex = 1;
     }
 
-    for (let i = 0; i < CONFIG.policeCarCount; i += 1) {
+    const policeCount = Math.max(6, Math.round(CONFIG.policeCarCount * profile.policeCarCountMult));
+    for (let i = 0; i < policeCount; i += 1) {
       const path = state.world.carPaths[(i * 3) % state.world.carPaths.length];
       const a = path[0];
       const b = path[1];
@@ -507,7 +590,92 @@ export function initializeGame() {
     }
   }
 
-  bootstrapWorldPopulation();
+  function resetTransientState() {
+    state.vehicles = [];
+    state.civilians = [];
+    state.hostiles = [];
+    state.bullets = [];
+    state.police.officers = [];
+    state.police.pressure = 0;
+    state.police.lastCrimeTime = -9999;
+    state.police.lastReinforcementTime = -9999;
+    state.police.activeRoadblocks = [];
+    state.police.searchOrigin = null;
+    state.dialogue.active = false;
+    state.dialogue.title = "";
+    state.dialogue.queue = [];
+    state.dialogue.index = 0;
+    state.dialogue.timer = 0;
+    state.mission.targets = [];
+    state.mission.runtime = {};
+    state.mission.toast = null;
+    state.mission.briefedMissionId = null;
+    state.mission.chaseVehicleId = null;
+    state.mission.chaseEnd = null;
+    state.mission.objectiveVehicleId = null;
+    state.mission.marker = null;
+    state.wanted = 0;
+    nextIds = { vehicle: 1, civilian: 1, officer: 1, hostile: 1, bullet: 1, target: 1 };
+  }
+
+  function restoreCampaign(savedProgress = null, options = {}) {
+    const { resetSaveFlags = false } = options;
+    resetTransientState();
+    state.player.x = DEFAULT_PLAYER_SPAWN.x;
+    state.player.y = DEFAULT_PLAYER_SPAWN.y;
+    state.player.vx = 0;
+    state.player.vy = 0;
+    state.player.health = 100;
+    state.player.money = Math.max(0, savedProgress?.money || 0);
+    state.player.inCarId = null;
+    state.player.facing = 0;
+    state.player.animPhase = 0;
+    state.player.nextShotAt = 0;
+    state.player.lastShotTime = -9999;
+    state.player.lastDamageTime = -9999;
+    state.player.lastCombatTime = -9999;
+    state.player.hasPackage = false;
+    state.player.checkpoint = { x: DEFAULT_PLAYER_SPAWN.x, y: DEFAULT_PLAYER_SPAWN.y };
+    if (savedProgress?.checkpoint && typeof savedProgress.checkpoint.x === "number" && typeof savedProgress.checkpoint.y === "number") {
+      state.player.checkpoint = { x: savedProgress.checkpoint.x, y: savedProgress.checkpoint.y };
+      state.player.x = savedProgress.checkpoint.x;
+      state.player.y = savedProgress.checkpoint.y;
+    }
+
+    bootstrapWorldPopulation();
+
+    state.mission.index = 0;
+    state.mission.current = state.mission.missions[0];
+    state.mission.stageIndex = 0;
+    state.mission.completed = false;
+    state.save.loaded = Boolean(savedProgress);
+    if (resetSaveFlags) {
+      state.save.exists = false;
+      state.save.data = null;
+      state.save.lastSavedAt = null;
+    }
+
+    if (savedProgress?.completed) {
+      state.mission.index = state.mission.missions.length;
+      state.mission.current = null;
+      state.mission.stage = null;
+      state.mission.stageLabel = "All missions cleared";
+      state.mission.completed = true;
+      state.mission.marker = null;
+      return;
+    }
+
+    if (savedProgress && typeof savedProgress.missionIndex === "number") {
+      const missionIndex = clamp(Math.floor(savedProgress.missionIndex), 0, state.mission.missions.length - 1);
+      state.mission.index = missionIndex;
+      state.mission.current = state.mission.missions[missionIndex];
+      const stageIndex = clamp(Math.floor(savedProgress.stageIndex || 0), 0, state.mission.current.stages.length - 1);
+      startMissionStage(stageIndex);
+      return;
+    }
+
+    startMissionStage(0);
+  }
 
   function resizeCanvas() {
     const cssWidth = Math.max(960, Math.min(window.innerWidth, 1600));
@@ -617,7 +785,7 @@ export function initializeGame() {
 
   function startMissionStage(index, resetTimer = true) {
     state.mission.stageIndex = index;
-    const stage = rebalanceStageForDefaultDifficulty(cloneStage(currentStage()));
+    const stage = rebalanceStageForDifficulty(cloneStage(currentStage()), difficultyProfile());
     state.mission.stage = stage;
     state.mission.stageLabel = stage?.label || "";
     if (resetTimer) state.mission.timer = stage?.duration || stage?.timeLimit || 0;
@@ -720,6 +888,8 @@ export function initializeGame() {
     state.player.vx = 0;
     state.player.vy = 0;
     state.player.health = 100;
+    state.player.lastDamageTime = -9999;
+    state.player.lastCombatTime = -9999;
     state.wanted = 0;
     state.police.pressure = 0;
     state.police.activeRoadblocks = [];
@@ -728,24 +898,9 @@ export function initializeGame() {
     startMissionStage(state.mission.stageIndex);
   }
 
-  state.wanted = 0;
+  loadSettings();
   const savedProgress = loadProgress();
-  if (savedProgress?.completed) {
-    state.mission.index = state.mission.missions.length;
-    state.mission.current = null;
-    state.mission.stage = null;
-    state.mission.stageLabel = "All missions cleared";
-    state.mission.completed = true;
-    state.mission.marker = null;
-  } else if (savedProgress && typeof savedProgress.missionIndex === "number") {
-    const missionIndex = clamp(Math.floor(savedProgress.missionIndex), 0, state.mission.missions.length - 1);
-    state.mission.index = missionIndex;
-    state.mission.current = state.mission.missions[missionIndex];
-    const stageIndex = clamp(Math.floor(savedProgress.stageIndex || 0), 0, state.mission.current.stages.length - 1);
-    startMissionStage(stageIndex);
-  } else {
-    startMissionStage(0);
-  }
+  restoreCampaign(savedProgress);
 
   function playerAnchor() {
     if (state.player.inCarId) {
@@ -773,9 +928,11 @@ export function initializeGame() {
     if (amount <= 0) return;
     state.player.health = clamp(state.player.health - amount, 0, 100);
     state.player.lastDamageTime = state.time;
+    state.player.lastCombatTime = state.time;
   }
 
   function fireBullet(team, x, y, angle, inheritedVX = 0, inheritedVY = 0) {
+    const profile = difficultyProfile();
     const ownerCooldown =
       team === "player" ? state.player :
       team === "police" ? null :
@@ -784,6 +941,7 @@ export function initializeGame() {
     if (team === "player") {
       state.player.nextShotAt = state.time + CONFIG.shootCooldown;
       state.player.lastShotTime = state.time;
+      state.player.lastCombatTime = state.time;
       audio.playShot();
     }
     state.bullets.push({
@@ -798,9 +956,9 @@ export function initializeGame() {
       r: 3,
       life: CONFIG.bulletLifetime,
       damage:
-        team === "player" ? CONFIG.playerBulletDamage :
-        team === "police" ? CONFIG.policeBulletDamage :
-        CONFIG.enemyBulletDamage,
+        team === "player" ? CONFIG.playerBulletDamage * profile.playerBulletDamageMult :
+        team === "police" ? CONFIG.policeBulletDamage * profile.policeBulletDamageMult :
+        CONFIG.enemyBulletDamage * profile.enemyBulletDamageMult,
     });
   }
 
@@ -836,16 +994,19 @@ export function initializeGame() {
   }
 
   function updatePlayerOnFoot(dt) {
+    const profile = difficultyProfile();
+    const playerAccel = CONFIG.playerAccel * profile.playerAccelMult;
+    const playerMaxSpeed = CONFIG.playerMaxSpeed * profile.playerMaxSpeedMult;
     const moveX = (input.keys.has("ArrowRight") || input.keys.has("KeyD") ? 1 : 0) - (input.keys.has("ArrowLeft") || input.keys.has("KeyA") ? 1 : 0);
     const moveY = (input.keys.has("ArrowDown") || input.keys.has("KeyS") ? 1 : 0) - (input.keys.has("ArrowUp") || input.keys.has("KeyW") ? 1 : 0);
     const len = Math.hypot(moveX, moveY) || 1;
-    state.player.vx += (moveX / len) * CONFIG.playerAccel * dt;
-    state.player.vy += (moveY / len) * CONFIG.playerAccel * dt;
+    state.player.vx += (moveX / len) * playerAccel * dt;
+    state.player.vy += (moveY / len) * playerAccel * dt;
     state.player.vx *= Math.exp(-CONFIG.playerDrag * dt);
     state.player.vy *= Math.exp(-CONFIG.playerDrag * dt);
     const speed = magnitude(state.player.vx, state.player.vy);
-    if (speed > CONFIG.playerMaxSpeed) {
-      const ratio = CONFIG.playerMaxSpeed / speed;
+    if (speed > playerMaxSpeed) {
+      const ratio = playerMaxSpeed / speed;
       state.player.vx *= ratio;
       state.player.vy *= ratio;
     }
@@ -1070,6 +1231,7 @@ export function initializeGame() {
   }
 
   function updateOfficer(officer, dt) {
+    const profile = difficultyProfile();
     officer.shootCooldown = Math.max(0, officer.shootCooldown - dt);
     officer.stateTimer += dt;
     const anchor = playerAnchor();
@@ -1132,9 +1294,10 @@ export function initializeGame() {
     officer.vx *= Math.exp(-4.7 * dt);
     officer.vy *= Math.exp(-4.7 * dt);
     const speed = magnitude(officer.vx, officer.vy);
-    if (speed > CONFIG.policeOfficerMaxSpeed) {
-      officer.vx *= CONFIG.policeOfficerMaxSpeed / speed;
-      officer.vy *= CONFIG.policeOfficerMaxSpeed / speed;
+    const officerMaxSpeed = CONFIG.policeOfficerMaxSpeed * profile.policeOfficerSpeedMult;
+    if (speed > officerMaxSpeed) {
+      officer.vx *= officerMaxSpeed / speed;
+      officer.vy *= officerMaxSpeed / speed;
     }
     officer.x += officer.vx * dt;
     officer.y += officer.vy * dt;
@@ -1147,8 +1310,8 @@ export function initializeGame() {
       officer.shootCooldown = CONFIG.officerShootCooldown;
     }
     if (distToPlayer < 34) {
-      state.police.pressure = clamp(state.police.pressure + dt * CONFIG.policeContactPressureRate, 0, 1);
-      if (!state.player.inCarId) damagePlayer(CONFIG.policeContactDamagePerSecond * dt);
+      state.police.pressure = clamp(state.police.pressure + dt * CONFIG.policeContactPressureRate * profile.policePressureMult, 0, 1);
+      if (!state.player.inCarId) damagePlayer(CONFIG.policeContactDamagePerSecond * profile.policeContactDamageMult * dt);
     }
   }
 
@@ -1268,13 +1431,14 @@ export function initializeGame() {
   }
 
   function updateWanted(dt) {
+    const profile = difficultyProfile();
     if (state.time - state.police.lastCrimeTime > CONFIG.wantedDecayDelay) state.wanted = Math.max(0, state.wanted - dt * CONFIG.wantedDecayRate);
     let nearestPolice = Infinity;
     const anchor = playerAnchor();
     for (const vehicle of state.vehicles) if (vehicle.kind === "police") nearestPolice = Math.min(nearestPolice, Math.hypot(vehicle.x - anchor.x, vehicle.y - anchor.y));
     for (const officer of state.police.officers) nearestPolice = Math.min(nearestPolice, Math.hypot(officer.x - anchor.x, officer.y - anchor.y));
     if (state.wanted > 0.15) {
-      if (nearestPolice < 120) state.police.pressure = clamp(state.police.pressure + dt * (CONFIG.policePressureNearRate + state.wanted * CONFIG.policePressureWantedScale), 0, 1);
+      if (nearestPolice < 120) state.police.pressure = clamp(state.police.pressure + dt * (CONFIG.policePressureNearRate + state.wanted * CONFIG.policePressureWantedScale) * profile.policePressureMult, 0, 1);
       else state.police.pressure = Math.max(0, state.police.pressure - dt * CONFIG.policePressureFarDecay);
     } else {
       state.police.pressure = Math.max(0, state.police.pressure - dt * CONFIG.policePressureIdleDecay);
@@ -1283,8 +1447,9 @@ export function initializeGame() {
   }
 
   function updatePoliceReinforcements() {
-    if (state.wanted < CONFIG.policeReinforcementWantedThreshold) return;
-    if (state.time - state.police.lastReinforcementTime < CONFIG.policeReinforcementCooldown) return;
+    const profile = difficultyProfile();
+    if (state.wanted < CONFIG.policeReinforcementWantedThreshold + profile.policeReinforcementWantedThresholdOffset) return;
+    if (state.time - state.police.lastReinforcementTime < CONFIG.policeReinforcementCooldown * profile.policeReinforcementCooldownMult) return;
     const anchor = playerAnchor();
     const district = findDistrict(state.world, anchor.x, anchor.y);
     const nearbyPoliceCars = state.vehicles.filter((vehicle) => vehicle.kind === "police" && Math.hypot(vehicle.x - anchor.x, vehicle.y - anchor.y) < 980).length;
@@ -1295,12 +1460,23 @@ export function initializeGame() {
     state.police.lastReinforcementTime = state.time;
   }
 
+  function isSafeForRegen() {
+    const anchor = playerAnchor();
+    const threatRadius = CONFIG.healthRegenThreatRadius;
+    const nearbyOfficer = state.police.officers.some((officer) => Math.hypot(officer.x - anchor.x, officer.y - anchor.y) < threatRadius);
+    const nearbyHostile = state.hostiles.some((hostile) => Math.hypot(hostile.x - anchor.x, hostile.y - anchor.y) < threatRadius);
+    const nearbyPoliceCar = state.wanted >= 0.3 && state.vehicles.some((vehicle) => vehicle.kind === "police" && Math.hypot(vehicle.x - anchor.x, vehicle.y - anchor.y) < threatRadius + 40);
+    const nearbyEnemyBullet = state.bullets.some((bullet) => bullet.team !== "player" && Math.hypot(bullet.x - anchor.x, bullet.y - anchor.y) < threatRadius);
+    return !nearbyOfficer && !nearbyHostile && !nearbyPoliceCar && !nearbyEnemyBullet && state.wanted <= CONFIG.healthRegenWantedLock;
+  }
+
   function updateHealthRegen(dt) {
-    const speed = playerSpeed();
-    const moving = speed > 8 || input.keys.has("ArrowUp") || input.keys.has("ArrowDown") || input.keys.has("ArrowLeft") || input.keys.has("ArrowRight") || input.keys.has("KeyW") || input.keys.has("KeyA") || input.keys.has("KeyS") || input.keys.has("KeyD");
-    const cooldownOver = state.time - state.player.lastDamageTime > CONFIG.healthRegenDelay;
-    const recentlyShot = state.time - state.player.lastShotTime < 1.6;
-    if (!moving && cooldownOver && !recentlyShot) state.player.health = Math.min(100, state.player.health + CONFIG.healthRegenRate * dt);
+    const profile = difficultyProfile();
+    const recentlyShot = state.time - state.player.lastShotTime < CONFIG.healthRegenRecentShotDelay;
+    const recentlyDamaged = state.time - state.player.lastDamageTime < CONFIG.healthRegenSafeDelay;
+    if (recentlyShot || recentlyDamaged || !isSafeForRegen()) state.player.lastCombatTime = state.time;
+    const safeForLongEnough = state.time - state.player.lastCombatTime >= CONFIG.healthRegenSafeDelay;
+    if (safeForLongEnough) state.player.health = Math.min(100, state.player.health + CONFIG.healthRegenRate * profile.healthRegenRateMult * dt);
   }
 
   function updateDialogue(dt) {
@@ -1433,10 +1609,29 @@ export function initializeGame() {
 
   function unlockAudioAndStart() {
     audio.unlock();
+    persistSettings();
     state.mode = "playing";
     startOverlay.classList.add("hidden");
     if (!state.save.exists && state.mission.current) persistProgress(false);
     if (state.save.exists) setSaveToast(state.save.loaded ? "SAVE RESTORED" : "SAVE READY");
+    render();
+  }
+
+  function applyDifficultySelection(difficultyId) {
+    if (!DIFFICULTY_MODES[difficultyId] || state.settings.difficulty === difficultyId) return;
+    state.settings.difficulty = difficultyId;
+    persistSettings();
+    restoreCampaign(state.save.exists ? state.save.data : null, { resetSaveFlags: !state.save.exists });
+    updateHud();
+    syncMenuUi();
+    render();
+  }
+
+  function resetProgressFromMenu() {
+    clearSavedProgress();
+    restoreCampaign(null, { resetSaveFlags: true });
+    updateHud();
+    syncMenuUi();
     render();
   }
 
@@ -1485,9 +1680,11 @@ export function initializeGame() {
 
   window.render_game_to_text = () => {
     const anchor = playerAnchor();
+    const safeFor = Math.max(0, state.time - state.player.lastCombatTime);
     return JSON.stringify({
       mode: state.mode,
       paused: state.paused,
+      difficulty: state.settings.difficulty,
       coordinateSystem: {
         origin: "top-left of world",
         xAxis: "increases right",
@@ -1504,6 +1701,8 @@ export function initializeGame() {
         vx: Number(state.player.vx.toFixed(1)),
         vy: Number(state.player.vy.toFixed(1)),
         health: Number(state.player.health.toFixed(1)),
+        regenActive: safeFor >= CONFIG.healthRegenSafeDelay && state.player.health < 100,
+        regenSafeFor: Number(safeFor.toFixed(1)),
         money: Math.round(state.player.money),
         wanted: Number(state.wanted.toFixed(2)),
       },
@@ -1557,10 +1756,15 @@ export function initializeGame() {
   window.addEventListener("resize", resizeAndRender);
   window.addEventListener("fullscreenchange", resizeAndRender);
   startButton.addEventListener("click", unlockAudioAndStart);
+  resetButton.addEventListener("click", resetProgressFromMenu);
+  for (const button of difficultyButtons) {
+    button.addEventListener("click", () => applyDifficultySelection(button.dataset.difficulty));
+  }
   window.clearSavedProgress = clearSavedProgress;
+  window.resetGameProgress = resetProgressFromMenu;
 
   document.querySelector(".panel ul").innerHTML = START_SCREEN_LINES.map((line) => `<li>${line}</li>`).join("");
-  if (state.save.exists) startButton.textContent = "Continue Operation";
+  syncMenuUi();
   resizeCanvas();
   updateHud();
   render();

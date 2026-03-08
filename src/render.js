@@ -496,68 +496,60 @@ function drawMissionMarker(ctx, state) {
 
 function drawUi(ctx, canvas, state, assets) {
   const district = findDistrict(state.world, state.player.x, state.player.y);
-  const strip = ctx.createLinearGradient(0, 0, canvas.width, 0);
-  strip.addColorStop(0, "rgba(12,16,22,0.64)");
-  strip.addColorStop(0.5, "rgba(24,29,39,0.52)");
-  strip.addColorStop(1, "rgba(12,16,22,0.64)");
+  const missionTitle = state.mission.current ? `${district.name} | ${state.mission.current.name}` : `${district.name} | Streets Quiet`;
+  const missionLabel = state.mission.current ? state.mission.stageLabel : "No active mission";
+  const safeFor = Math.max(0, state.time - state.player.lastCombatTime);
+  const regenReady = safeFor >= CONFIG.healthRegenSafeDelay;
+  const regenText =
+    state.player.health >= 100 ? "Stable" :
+    regenReady ? "Recovering" :
+    `Recover in ${Math.max(1, Math.ceil(CONFIG.healthRegenSafeDelay - safeFor))}s`;
+
+  ctx.textAlign = "left";
+
+  const topStripWidth = Math.min(canvas.width - 320, Math.max(380, ctx.measureText(missionLabel).width + 150));
+  const topStripX = Math.max(170, canvas.width * 0.5 - topStripWidth * 0.5);
+  const strip = ctx.createLinearGradient(topStripX, 0, topStripX + topStripWidth, 0);
+  strip.addColorStop(0, "rgba(12,16,22,0.72)");
+  strip.addColorStop(1, "rgba(22,29,37,0.66)");
   ctx.fillStyle = strip;
-  drawRoundedRect(ctx, 14, 12, canvas.width - 28, 48, 12);
+  drawRoundedRect(ctx, topStripX, 14, topStripWidth, 58, 16);
   ctx.fill();
+  ctx.strokeStyle = "rgba(232, 204, 126, 0.24)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.fillStyle = "#f0cd7b";
+  ctx.font = "700 12px Georgia, serif";
+  ctx.fillText(missionTitle.toUpperCase(), topStripX + 18, 36);
+  ctx.fillStyle = "#f4efe2";
+  ctx.font = "16px Georgia, serif";
+  drawWrappedText(ctx, missionLabel, topStripX + 18, 58, topStripWidth - 36, 18);
 
-  const items = [
-    state.player.inCarId ? "IN CAR" : "ON FOOT",
-    `HEALTH ${Math.round(state.player.health)}`,
-    `WANTED ${state.wanted.toFixed(1)}`,
-    `CASH $${Math.round(state.player.money)}`,
-    district.name,
-    state.mission.current ? `${state.mission.current.name}: ${state.mission.stageLabel}` : "NO ACTIVE MISSION",
-  ];
-
-  let cursor = 28;
-  ctx.font = "700 13px Georgia, serif";
-  for (const item of items) {
-    const width = Math.min(canvas.width - 52, ctx.measureText(item).width + 20);
-    ctx.fillStyle = item === district.name ? "rgba(76,99,62,0.88)" : "rgba(35,40,52,0.82)";
-    drawRoundedRect(ctx, cursor, 18, width, 22, 7);
-    ctx.fill();
-    ctx.fillStyle = "#efe5c6";
-    ctx.textAlign = "left";
-    ctx.fillText(item, cursor + 10, 33);
-    cursor += width + 10;
-    if (cursor > canvas.width - 240) break;
-  }
-
-  if (state.mission.toast) {
-    ctx.fillStyle = "rgba(12,16,22,0.7)";
-    drawRoundedRect(ctx, canvas.width * 0.5 - 180, canvas.height - 72, 360, 40, 10);
-    ctx.fill();
-    ctx.fillStyle = "#f5df99";
-    ctx.textAlign = "center";
-    ctx.font = "700 16px Georgia, serif";
-    ctx.fillText(state.mission.toast.text, canvas.width * 0.5, canvas.height - 46);
-  }
+  ctx.fillStyle = "rgba(12,16,22,0.82)";
+  drawRoundedRect(ctx, 18, 16, 164, 56, 14);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(232, 204, 126, 0.22)";
+  ctx.stroke();
+  ctx.fillStyle = "#92b36d";
+  ctx.font = "700 11px Georgia, serif";
+  ctx.fillText("CASH", 32, 36);
+  ctx.fillStyle = "#efe5c6";
+  ctx.font = "700 24px Georgia, serif";
+  ctx.fillText(`$${Math.round(state.player.money)}`, 32, 61);
 
   if (state.save.toast) {
-    ctx.fillStyle = "rgba(16, 22, 18, 0.72)";
-    drawRoundedRect(ctx, canvas.width - 194, 66, 176, 28, 8);
+    ctx.fillStyle = "rgba(16,22,18,0.76)";
+    drawRoundedRect(ctx, 18, 80, 164, 28, 9);
     ctx.fill();
     ctx.fillStyle = "#cde9ad";
     ctx.font = "700 12px Georgia, serif";
-    ctx.textAlign = "center";
-    ctx.fillText(state.save.toast.text, canvas.width - 106, 84);
-  }
-
-  if (state.wanted > 0.15) {
-    ctx.fillStyle = "rgba(0,0,0,0.44)";
-    ctx.fillRect(0, canvas.height - 18, canvas.width, 18);
-    ctx.fillStyle = "#d65e5e";
-    ctx.fillRect(0, canvas.height - 18, canvas.width * state.policePressure, 18);
+    ctx.fillText(state.save.toast.text, 31, 99);
   }
 
   const mapW = 252;
   const mapH = 190;
   const mapX = canvas.width - mapW - 18;
-  const mapY = canvas.height - mapH - 18;
+  const mapY = 16;
   ctx.fillStyle = "rgba(10,14,19,0.74)";
   drawRoundedRect(ctx, mapX, mapY, mapW, mapH, 14);
   ctx.fill();
@@ -601,6 +593,70 @@ function drawUi(ctx, canvas, state, assets) {
   ctx.textAlign = "left";
   ctx.fillText("SURVEILLANCE MAP", mapX + 18, mapY + 16);
 
+  const healthX = 18;
+  const healthY = canvas.height - 102;
+  const healthW = 290;
+  const healthH = 84;
+  ctx.fillStyle = "rgba(12,16,22,0.82)";
+  drawRoundedRect(ctx, healthX, healthY, healthW, healthH, 16);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(232, 204, 126, 0.22)";
+  ctx.stroke();
+  ctx.fillStyle = "#f0cd7b";
+  ctx.font = "700 11px Georgia, serif";
+  ctx.fillText("HEALTH", healthX + 16, healthY + 22);
+  ctx.fillStyle = "#f4efe2";
+  ctx.font = "700 19px Georgia, serif";
+  ctx.fillText(`${Math.round(state.player.health)} / 100`, healthX + 16, healthY + 48);
+  ctx.fillStyle = "rgba(255,255,255,0.08)";
+  drawRoundedRect(ctx, healthX + 16, healthY + 56, healthW - 32, 14, 7);
+  ctx.fill();
+  const healthFill = (healthW - 32) * Math.max(0, Math.min(1, state.player.health / 100));
+  const healthGradient = ctx.createLinearGradient(healthX + 16, 0, healthX + 16 + healthW - 32, 0);
+  healthGradient.addColorStop(0, "#d85f5f");
+  healthGradient.addColorStop(0.5, "#d8a95f");
+  healthGradient.addColorStop(1, "#77be70");
+  ctx.fillStyle = healthGradient;
+  drawRoundedRect(ctx, healthX + 16, healthY + 56, healthFill, 14, 7);
+  ctx.fill();
+  ctx.fillStyle = regenReady ? "#b8e59d" : "rgba(244,239,226,0.72)";
+  ctx.font = "13px Georgia, serif";
+  ctx.fillText(regenText, healthX + 16, healthY + 78);
+
+  const statusW = 286;
+  const statusH = 108;
+  const statusX = canvas.width - statusW - 18;
+  const statusY = canvas.height - statusH - 18;
+  ctx.fillStyle = "rgba(12,16,22,0.82)";
+  drawRoundedRect(ctx, statusX, statusY, statusW, statusH, 16);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(232, 204, 126, 0.22)";
+  ctx.stroke();
+  ctx.fillStyle = "#f0cd7b";
+  ctx.font = "700 11px Georgia, serif";
+  ctx.fillText("STATUS", statusX + 16, statusY + 22);
+  ctx.fillStyle = "#efe5c6";
+  ctx.font = "14px Georgia, serif";
+  ctx.fillText(`Wanted: ${state.wanted.toFixed(1)}`, statusX + 16, statusY + 44);
+  ctx.fillText(`Speed: ${Math.round(Math.hypot(state.player.vx, state.player.vy))}`, statusX + 16, statusY + 64);
+  ctx.fillText(`Mode: ${(state.settings?.difficulty || "normal").toUpperCase()}`, statusX + 16, statusY + 84);
+  ctx.fillStyle = state.wanted > 0.25 ? "#d97373" : "#9fd58d";
+  drawRoundedRect(ctx, statusX + 126, statusY + 34, statusW - 142, 14, 7);
+  ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.08)";
+  drawRoundedRect(ctx, statusX + 126, statusY + 56, statusW - 142, 14, 7);
+  ctx.fill();
+  ctx.fillStyle = "#d65e5e";
+  drawRoundedRect(ctx, statusX + 126, statusY + 34, (statusW - 142) * Math.min(1, state.wanted / 5), 14, 7);
+  ctx.fill();
+  ctx.fillStyle = "#8fc4d8";
+  drawRoundedRect(ctx, statusX + 126, statusY + 56, (statusW - 142) * Math.min(1, state.police.pressure), 14, 7);
+  ctx.fill();
+  ctx.fillStyle = "rgba(244,239,226,0.76)";
+  ctx.font = "12px Georgia, serif";
+  ctx.fillText("Heat", statusX + 126, statusY + 29);
+  ctx.fillText("Pressure", statusX + 126, statusY + 51);
+
   if (state.paused) {
     ctx.fillStyle = "rgba(0,0,0,0.46)";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -608,6 +664,16 @@ function drawUi(ctx, canvas, state, assets) {
     ctx.font = "700 48px Georgia, serif";
     ctx.textAlign = "center";
     ctx.fillText("PAUSED", canvas.width * 0.5, canvas.height * 0.5);
+  }
+
+  if (state.mission.toast) {
+    ctx.fillStyle = "rgba(12,16,22,0.72)";
+    drawRoundedRect(ctx, canvas.width * 0.5 - 180, canvas.height - 146, 360, 40, 10);
+    ctx.fill();
+    ctx.fillStyle = "#f5df99";
+    ctx.textAlign = "center";
+    ctx.font = "700 16px Georgia, serif";
+    ctx.fillText(state.mission.toast.text, canvas.width * 0.5, canvas.height - 120);
   }
 }
 
