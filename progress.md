@@ -35,6 +35,8 @@ Original prompt: develop a GTA style game where the camera is on top. A player c
 - Added district-specific ambient audio layers and UI blips through the Web Audio system.
 - Fixed mission geometry bugs by sanitizing all mission anchors to reachable spaces, moving landmark footprints off roads, filtering road-overlap buildings out of the generated city, and sanitizing dynamic mission spawns (targets, enemies, chase vehicles, objective vehicles).
 - Restored `B` as a fallback enter/exit vehicle key so the existing automated action payloads remain usable alongside `E`.
+- Rebalanced the default difficulty downward substantially: larger mission radii, longer timed windows, shorter survive stages, lower wanted spikes, more forgiving escape thresholds, fewer enemies/targets, weaker police pressure, and less punishing damage values.
+- Increased player survivability and mission clear speed by boosting player movement/firepower and lowering hostile, officer, and mission-object durability.
 
 ## TODO
 - Add longer multi-line stage dialogue for later missions so the mid/final acts feel less terse than the opener.
@@ -42,6 +44,7 @@ Original prompt: develop a GTA style game where the camera is on top. A player c
 - Add more concrete ambient event cues per district (rail clanks, harbor foghorns, downtown crowd swells).
 - Add an explicit "New Game / Continue" menu split and a visible manual clear-save option in the UI.
 - Replace the stale test action payloads so they explicitly skip dialogue and use the current intended control mapping.
+- Fix the `render_game_to_text()` startup mismatch during automated menu/dialogue entry; screenshots show live gameplay correctly, but the text payload can stay at `mode: "menu"` in those flows.
 
 ## Test Runs
 - `node --check game.js` passed.
@@ -91,3 +94,11 @@ Original prompt: develop a GTA style game where the camera is on top. A player c
   - Reviewed state payloads:
     - `output/web-game/mission-stage-advance/state-0.json`
     - `output/web-game/mission-fix-drive-2/state-0.json`
+- Difficulty rebalance validation on March 8, 2026:
+  - `python3 -m http.server 5182 --directory "/Users/adityagupta/Documents/Codex/Codex game test"`
+  - `node $WEB_GAME_CLIENT --url http://127.0.0.1:5182/index.html --actions-json '{"steps":[{"buttons":["enter"],"frames":2},{"buttons":["enter"],"frames":2},{"buttons":["right"],"frames":18},{"buttons":[],"frames":20}]}' --iterations 1 --pause-ms 140 --screenshot-dir output/web-game/easy-start`
+  - `node $WEB_GAME_CLIENT --url http://127.0.0.1:5182/index.html --actions-json '{"steps":[{"buttons":["enter"],"frames":2},{"buttons":[],"frames":18},{"buttons":["enter"],"frames":2},{"buttons":[],"frames":12},{"buttons":["space"],"frames":2},{"buttons":[],"frames":8},{"buttons":["space"],"frames":2},{"buttons":[],"frames":32}]}' --iterations 1 --pause-ms 180 --screenshot-dir output/web-game/easy-shoot`
+  - Reviewed screenshots:
+    - `output/web-game/easy-start/shot-0.png`
+    - `output/web-game/easy-shoot/shot-0.png`
+  - No `errors-*.json` files were produced in the difficulty runs.

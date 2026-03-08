@@ -58,7 +58,7 @@ function buildVehicle(id, kind, classId, x, y, angle, paint, path = null) {
     assignedRoadblock: null,
     deployedOfficers: [],
     offscreenRespawn: 0,
-    health: kind === "police" ? 180 : classId === "truck" ? 210 : 120,
+    health: kind === "police" ? 150 : classId === "truck" ? 210 : 120,
     lastSeenPlayer: null,
     navPath: [],
     navIndex: 0,
@@ -97,7 +97,7 @@ function buildOfficer(id, x, y, carId) {
     vy: 0,
     r: 10,
     mass: 90,
-    health: 110,
+    health: 85,
     animPhase: 0,
     state: "pursue",
     stateTimer: 0,
@@ -123,7 +123,7 @@ function buildHostile(id, x, y) {
     vy: 0,
     r: 10,
     mass: 86,
-    health: 90,
+    health: 72,
     animPhase: 0,
     state: "guard",
     stateTimer: 0,
@@ -139,8 +139,20 @@ function cloneStage(stage) {
   return JSON.parse(JSON.stringify(stage));
 }
 
+function rebalanceStageForDefaultDifficulty(stage) {
+  if (!stage) return stage;
+  if (stage.radius) stage.radius = Math.round(stage.radius * 1.2);
+  if (stage.duration) stage.duration = Math.max(6, Math.round(stage.duration * 0.65));
+  if (stage.timeLimit) stage.timeLimit = Math.max(24, Math.round(stage.timeLimit * 1.45));
+  if (stage.enemyCount) stage.enemyCount = Math.max(1, Math.ceil(stage.enemyCount * 0.5));
+  if (stage.targetCount) stage.targetCount = Math.max(1, Math.ceil(stage.targetCount * 0.5));
+  if (stage.wanted) stage.wanted = Number((stage.wanted * 0.62).toFixed(2));
+  if (typeof stage.targetWanted === "number") stage.targetWanted = Math.min(0.8, Number((stage.targetWanted + 0.35).toFixed(2)));
+  return stage;
+}
+
 function buildMissionTarget(id, x, y, kind = "crate") {
-  return { id, x, y, r: 16, health: kind === "fuel" ? 5 : 3, kind };
+  return { id, x, y, r: 16, health: kind === "fuel" ? 4 : 2, kind };
 }
 
 function createInput() {
@@ -605,7 +617,7 @@ export function initializeGame() {
 
   function startMissionStage(index, resetTimer = true) {
     state.mission.stageIndex = index;
-    const stage = cloneStage(currentStage());
+    const stage = rebalanceStageForDefaultDifficulty(cloneStage(currentStage()));
     state.mission.stage = stage;
     state.mission.stageLabel = stage?.label || "";
     if (resetTimer) state.mission.timer = stage?.duration || stage?.timeLimit || 0;
@@ -785,7 +797,10 @@ export function initializeGame() {
       vy: Math.sin(angle) * CONFIG.bulletSpeed + inheritedVY * 0.2,
       r: 3,
       life: CONFIG.bulletLifetime,
-      damage: team === "player" ? 38 : 12,
+      damage:
+        team === "player" ? CONFIG.playerBulletDamage :
+        team === "police" ? CONFIG.policeBulletDamage :
+        CONFIG.enemyBulletDamage,
     });
   }
 
@@ -844,7 +859,7 @@ export function initializeGame() {
 
     if (input.pressed.has("Space")) {
       fireBullet("player", state.player.x + Math.cos(state.player.facing) * 16, state.player.y + Math.sin(state.player.facing) * 16, state.player.facing, state.player.vx, state.player.vy);
-      noteCrime(0.04);
+      noteCrime(0.025);
     }
     if (input.pressed.has("KeyE") || input.pressed.has("KeyB")) {
       const vehicle = nearestVehicleForEntry();
@@ -869,7 +884,7 @@ export function initializeGame() {
 
     if (input.pressed.has("Space")) {
       fireBullet("player", vehicle.x + Math.cos(vehicle.angle) * (vehicle.length * 0.5 + 8), vehicle.y + Math.sin(vehicle.angle) * (vehicle.length * 0.5 + 8), vehicle.angle, vehicle.vx, vehicle.vy);
-      noteCrime(0.05);
+      noteCrime(0.03);
     }
     if ((input.pressed.has("KeyE") || input.pressed.has("KeyB")) && Math.abs(vehicle.forwardSpeed) < 42) {
       exitVehicle(vehicle);
@@ -910,7 +925,7 @@ export function initializeGame() {
 
     if (canSee) vehicle.lastSeenPlayer = { x: anchor.x, y: anchor.y, time: state.time };
 
-    if (state.wanted >= CONFIG.policeRoadblockWanted && !vehicle.assignedRoadblock && state.police.activeRoadblocks.length < 4) {
+    if (state.wanted >= CONFIG.policeRoadblockWanted && !vehicle.assignedRoadblock && state.police.activeRoadblocks.length < 2) {
       const spot = pickRoadblockSpot(state.world, anchor.x, anchor.y, dir.x, dir.y);
       if (spot) {
         vehicle.assignedRoadblock = spot;
@@ -924,13 +939,13 @@ export function initializeGame() {
       applyVehiclePhysics(vehicle, control.throttle, control.steer, control.brake, dt);
       if (control.dist < 48) {
         vehicle.forwardSpeed *= 0.6;
-        if (vehicle.deployedOfficers.length < 2 && distance < 420) deployOfficerFromCar(vehicle);
+        if (vehicle.deployedOfficers.length < 1 && distance < 320) deployOfficerFromCar(vehicle);
       }
       if (distance > 1100) vehicle.state = "search";
       return;
     }
 
-    if (state.wanted >= CONFIG.policeTacticalWanted && distance < 420 && vehicle.deployedOfficers.length < 2) {
+    if (state.wanted >= CONFIG.policeTacticalWanted && distance < 320 && vehicle.deployedOfficers.length < 1) {
       deployOfficerFromCar(vehicle);
       vehicle.state = "contain";
     }
@@ -1026,12 +1041,12 @@ export function initializeGame() {
     const los = !lineBlocked(state.world, hostile.x, hostile.y, anchor.x, anchor.y);
     let tx = hostile.anchorX;
     let ty = hostile.anchorY;
-    if (distance < 420) {
+    if (distance < 340) {
       hostile.state = "attack";
       tx = anchor.x + Math.cos(state.time + hostile.id) * 60;
       ty = anchor.y + Math.sin(state.time * 1.3 + hostile.id) * 60;
       hostile.facing = Math.atan2(anchor.y - hostile.y, anchor.x - hostile.x);
-      if (los && distance < 320 && hostile.shootCooldown <= 0) {
+      if (los && distance < 220 && hostile.shootCooldown <= 0) {
         fireBullet("enemy", hostile.x + Math.cos(hostile.facing) * 14, hostile.y + Math.sin(hostile.facing) * 14, hostile.facing);
         hostile.shootCooldown = CONFIG.enemyShootCooldown;
       }
@@ -1039,14 +1054,14 @@ export function initializeGame() {
     const dx = tx - hostile.x;
     const dy = ty - hostile.y;
     const dist = Math.hypot(dx, dy) || 1;
-    hostile.vx += (dx / dist) * 520 * dt;
-    hostile.vy += (dy / dist) * 520 * dt;
+    hostile.vx += (dx / dist) * 430 * dt;
+    hostile.vy += (dy / dist) * 430 * dt;
     hostile.vx *= Math.exp(-4.3 * dt);
     hostile.vy *= Math.exp(-4.3 * dt);
     const speed = magnitude(hostile.vx, hostile.vy);
-    if (speed > 170) {
-      hostile.vx *= 170 / speed;
-      hostile.vy *= 170 / speed;
+    if (speed > 148) {
+      hostile.vx *= 148 / speed;
+      hostile.vy *= 148 / speed;
     }
     hostile.x += hostile.vx * dt;
     hostile.y += hostile.vy * dt;
@@ -1076,7 +1091,7 @@ export function initializeGame() {
           return;
         }
       }
-    } else if (state.wanted >= CONFIG.policeTacticalWanted && officer.stateTimer > 1.2) {
+    } else if (state.wanted >= CONFIG.policeTacticalWanted && officer.stateTimer > 2.4) {
       officer.state = "flank";
     } else if (los) {
       officer.state = "pursue";
@@ -1112,8 +1127,8 @@ export function initializeGame() {
     const dx = targetX - officer.x;
     const dy = targetY - officer.y;
     const dist = Math.hypot(dx, dy) || 1;
-    officer.vx += (dx / dist) * 720 * dt;
-    officer.vy += (dy / dist) * 720 * dt;
+    officer.vx += (dx / dist) * 560 * dt;
+    officer.vy += (dy / dist) * 560 * dt;
     officer.vx *= Math.exp(-4.7 * dt);
     officer.vy *= Math.exp(-4.7 * dt);
     const speed = magnitude(officer.vx, officer.vy);
@@ -1127,13 +1142,13 @@ export function initializeGame() {
     officer.facing = Math.atan2(anchor.y - officer.y, anchor.x - officer.x);
     resolveWorldCollision(state.world, officer);
 
-    if (los && distToPlayer < 260 && officer.shootCooldown <= 0) {
+    if (los && distToPlayer < 200 && officer.shootCooldown <= 0) {
       fireBullet("police", officer.x + Math.cos(officer.facing) * 14, officer.y + Math.sin(officer.facing) * 14, officer.facing);
       officer.shootCooldown = CONFIG.officerShootCooldown;
     }
     if (distToPlayer < 34) {
-      state.police.pressure = clamp(state.police.pressure + dt * 0.32, 0, 1);
-      if (!state.player.inCarId) damagePlayer(8 * dt);
+      state.police.pressure = clamp(state.police.pressure + dt * CONFIG.policeContactPressureRate, 0, 1);
+      if (!state.player.inCarId) damagePlayer(CONFIG.policeContactDamagePerSecond * dt);
     }
   }
 
@@ -1231,7 +1246,7 @@ export function initializeGame() {
         if (impact > 84) civilian.stunned = 2.6;
         if (state.player.inCarId === vehicle.id && impact > 76) {
           noteCrime(0.5, civilian.x, civilian.y);
-          damagePlayer(impact * 0.009);
+          damagePlayer(impact * CONFIG.playerVehicleCrashDamageScale);
         }
       }
       for (const officer of state.police.officers) {
@@ -1245,7 +1260,7 @@ export function initializeGame() {
     if (!state.player.inCarId) {
       for (const vehicle of state.vehicles) {
         const impact = resolveDynamicCircle(vehicle, state.player, 0.12);
-        if (impact > 44) damagePlayer(impact * 0.2);
+        if (impact > 44) damagePlayer(impact * CONFIG.playerCrashDamageScale);
       }
       for (const officer of state.police.officers) resolveDynamicCircle(state.player, officer, 0.18);
       for (const hostile of state.hostiles) resolveDynamicCircle(state.player, hostile, 0.18);
@@ -1253,29 +1268,29 @@ export function initializeGame() {
   }
 
   function updateWanted(dt) {
-    if (state.time - state.police.lastCrimeTime > 12) state.wanted = Math.max(0, state.wanted - dt * 0.11);
+    if (state.time - state.police.lastCrimeTime > CONFIG.wantedDecayDelay) state.wanted = Math.max(0, state.wanted - dt * CONFIG.wantedDecayRate);
     let nearestPolice = Infinity;
     const anchor = playerAnchor();
     for (const vehicle of state.vehicles) if (vehicle.kind === "police") nearestPolice = Math.min(nearestPolice, Math.hypot(vehicle.x - anchor.x, vehicle.y - anchor.y));
     for (const officer of state.police.officers) nearestPolice = Math.min(nearestPolice, Math.hypot(officer.x - anchor.x, officer.y - anchor.y));
     if (state.wanted > 0.15) {
-      if (nearestPolice < 120) state.police.pressure = clamp(state.police.pressure + dt * (0.34 + state.wanted * 0.1), 0, 1);
-      else state.police.pressure = Math.max(0, state.police.pressure - dt * 0.18);
+      if (nearestPolice < 120) state.police.pressure = clamp(state.police.pressure + dt * (CONFIG.policePressureNearRate + state.wanted * CONFIG.policePressureWantedScale), 0, 1);
+      else state.police.pressure = Math.max(0, state.police.pressure - dt * CONFIG.policePressureFarDecay);
     } else {
-      state.police.pressure = Math.max(0, state.police.pressure - dt * 0.35);
+      state.police.pressure = Math.max(0, state.police.pressure - dt * CONFIG.policePressureIdleDecay);
     }
     if (state.police.pressure >= 1 || state.player.health <= 0) failMissionStage(state.player.health <= 0 ? "You were wasted." : "Busted by tactical police.");
   }
 
   function updatePoliceReinforcements() {
-    if (state.wanted < 1.2) return;
+    if (state.wanted < CONFIG.policeReinforcementWantedThreshold) return;
     if (state.time - state.police.lastReinforcementTime < CONFIG.policeReinforcementCooldown) return;
     const anchor = playerAnchor();
     const district = findDistrict(state.world, anchor.x, anchor.y);
     const nearbyPoliceCars = state.vehicles.filter((vehicle) => vehicle.kind === "police" && Math.hypot(vehicle.x - anchor.x, vehicle.y - anchor.y) < 980).length;
-    const desiredCars = district.id === "downtown" ? 4 : district.id === "industrial" ? 3 : 2;
-    if (nearbyPoliceCars >= desiredCars + Math.floor(state.wanted * 0.6)) return;
-    const spawnNode = nearestNavNode(state.world, anchor.x + 520, anchor.y + 520) || state.world.navNodes[0];
+    const desiredCars = district.id === "downtown" ? 2 : 1;
+    if (nearbyPoliceCars >= desiredCars + Math.floor(state.wanted * 0.25)) return;
+    const spawnNode = nearestNavNode(state.world, anchor.x + 760, anchor.y + 760) || state.world.navNodes[0];
     spawnPoliceReinforcement(spawnNode.x, spawnNode.y, spawnNode);
     state.police.lastReinforcementTime = state.time;
   }
