@@ -1,6 +1,6 @@
-import * as THREE from "../../node_modules/three/build/three.module.js";
-import { GLTFLoader } from "../../node_modules/three/examples/jsm/loaders/GLTFLoader.js";
-import { clone as cloneSkinned } from "../../node_modules/three/examples/jsm/utils/SkeletonUtils.js";
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { clone as cloneSkinned } from "three/addons/utils/SkeletonUtils.js";
 
 import { ASSET_MANIFEST, resolveAssetUrl } from "./asset-manifest.js";
 import { createPrototypeLayout } from "./layout.js";

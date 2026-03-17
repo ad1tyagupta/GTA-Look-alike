@@ -168,3 +168,19 @@ Original prompt: develop a GTA style game where the camera is on top. A player c
     - `output/web-game/launcher-3d-root/shot-0.png`
     - `output/web-game/three-d-smoke-v5/shot-0.png`
   - No `errors-*.json` or `console-*.json` files were produced in the latest 3D smoke run.
+- 3D start-button deployment fix on March 17, 2026:
+  - Root cause: `three-d/src/app.js` imported Three.js browser modules from local `node_modules` paths, which works in a raw local repo server but breaks on deployed static hosting where `node_modules` is not publicly served.
+  - Added regression test:
+    - `three-d/tests/browser-imports.test.js`
+  - Updated `three-d/src/app.js` to import from the import-map specifiers already defined in `three-d/index.html`:
+    - `three`
+    - `three/addons/loaders/GLTFLoader.js`
+    - `three/addons/utils/SkeletonUtils.js`
+  - Verification:
+    - `npm test -- three-d/tests/browser-imports.test.js`
+    - `npm test`
+    - `python3 -m http.server 5185 --directory "/Users/adityagupta/Documents/Codex/Codex game test"`
+    - `node $WEB_GAME_CLIENT --url http://127.0.0.1:5185/three-d/index.html --click-selector "#start-3d-btn" --actions-json '{"steps":[{"buttons":[],"frames":45},{"buttons":["up"],"frames":18},{"buttons":[],"frames":10}]}' --iterations 1 --pause-ms 180 --screenshot-dir output/web-game/three-d-launch-fix`
+  - Reviewed outputs:
+    - `output/web-game/three-d-launch-fix/state-0.json` showed `mode: "free-roam"`
+    - `output/web-game/three-d-launch-fix/shot-0.png` showed the 3D scene rendered after clicking `Enter 3D Prototype`
