@@ -1,6 +1,13 @@
 Original prompt: develop a GTA style game where the camera is on top. A player can roam in the city. It has real physics. Um, and there are cars on the road, police, people, everything. Like how the initial GTA games used to be.
 
 ## Progress
+- Added a root launcher flow so the app now offers `Play 2D` and `Play 3D` before entering either version.
+- Kept the current 2D game runtime in place by deferring `src/game-app.js` loading until the user explicitly chooses 2D.
+- Added a separate `three-d/` app with its own HTML, styles, game bootstrap, asset manifest, layout, player helpers, render-state helpers, and Three.js runtime.
+- Built the first 3D prototype scene using the imported GLB assets: roads, buildings, parked vehicles, animated characters, and gun props.
+- Added deterministic helpers and text-state support for the 3D prototype, including `window.render_game_to_text` and `window.advanceTime(ms)`.
+- Added Node tests for the launcher shell plus the 3D manifest/layout/player/render-state helpers.
+- Installed a local `three` dependency and switched the package test script to `node --test`.
 - Created initial web game scaffold (`index.html`, `styles.css`, `game.js`).
 - Implemented top-down city map with roads/buildings and a camera-follow system.
 - Added player movement on foot and entering/exiting vehicles.
@@ -41,16 +48,45 @@ Original prompt: develop a GTA style game where the camera is on top. A player c
 - Added a proper menu reset flow that clears saved progress and restarts from mission one.
 - Moved the HUD into corner-based canvas panels: cash top-left, mission strip top-center, minimap top-right, health bottom-left, and status bottom-right.
 - Changed health recovery to a combat-safe model: no regen during active pressure, then recovery starts only after 10 seconds away from threats and returns slowly.
+- Added a split launcher flow so the root app now offers `Play 2D` and `Play 3D` before startup, with the original 2D runtime still loading on demand.
+- Created a separate 3D prototype app under `three-d/` with its own HTML/CSS/JS runtime, Three.js scene bootstrap, asset manifest, handcrafted city-block layout, player controller, and text-state hooks.
+- Verified the currently available 3D assets and built the first prototype scene with imported roads, buildings, vehicles, gun props, and animated character entities.
+- Kept the modular road kit out of direct placement after inspecting road orientation/pivot behavior; the prototype currently places only the road assets that are safe as full scene objects.
+- Added browser-automation-friendly hooks for the 3D app: `window.render_game_to_text` and `window.advanceTime(ms)`.
+- Added Node tests for launcher markup/routing plus 3D manifest/layout/player/render-state helpers.
 
 ## TODO
+- Verify the 3D prototype visually in a non-flaky browser loop once the heavy GLB startup is trimmed further or a lighter smoke harness is added; current headless Playwright runs still hang during/after the WebGL + GLB startup path.
+- Consider pruning or consolidating the duplicate `.mjs` helper/runtime files under `three-d/src/` and the paired `.mjs` tests if we decide to standardize on one module style.
 - Add longer multi-line stage dialogue for later missions so the mid/final acts feel less terse than the opener.
 - Improve AI navigation around dense building corners for hostiles, not just police.
 - Add more concrete ambient event cues per district (rail clanks, harbor foghorns, downtown crowd swells).
 - Replace the stale test action payloads so they explicitly skip dialogue and use the current intended control mapping.
 - Fix the `render_game_to_text()` startup mismatch during automated menu/dialogue entry; screenshots show live gameplay correctly, but the text payload can stay at `mode: "menu"` in those flows.
 - If desired, add a dedicated page-level screenshot harness for menu verification, because the current Playwright client captures the canvas and not the HTML start overlay.
+- Improve the visual readability of imported 3D characters. The prototype currently uses visible marker/beacon helpers so character positions are obvious, but the character presentation still needs polish.
+- Replace the placeholder-looking road/plaza treatment in the 3D prototype with more intentional geometry or modular road-kit child extraction.
+- Decide whether the 3D prototype should stay as a handcrafted city block or start reusing more of the authored 2D world data.
 
 ## Test Runs
+- Launcher + 3D prototype implementation on March 17, 2026:
+  - `npm install`
+  - `npm test`
+  - `python3 -m http.server 5192 --directory "/Users/adityagupta/Documents/Codex/Codex game test"`
+  - `node "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url "http://127.0.0.1:5192/three-d/index.html?autostart=1" --actions-json '{"steps":[{"buttons":[],"frames":40},{"buttons":["up"],"frames":24},{"buttons":["up"],"frames":20},{"buttons":["right"],"frames":18},{"buttons":[],"frames":12}]}' --iterations 1 --pause-ms 180 --screenshot-dir output/web-game/three-d-smoke`
+  - Browser findings:
+    - fixed a bare-module browser error by switching the 3D runtime away from unresolved browser `three` specifiers
+    - the Playwright skill-client still hangs intermittently before artifact generation completes, but the direct Playwright smoke checks below verified runtime behavior successfully
+  - Direct Playwright verification:
+    - launcher screenshot: `output/web-game/launcher-page.png`
+    - 3D scene screenshot: `output/web-game/three-d-manual-page.png`
+    - 3D runtime state after movement burst:
+      - `{"mode":"free-roam","coordinateSystem":"x right, z forward/back on ground plane, y up","player":{"x":0.9,"y":0,"z":16.65,"facing":1.57,"speed":0,"animationState":"idle"},"camera":{"x":-21.62,"y":18,"z":39.78},"scene":{"vehicles":5,"characters":6,"props":3}}`
+    - confirmed browser state for `http://127.0.0.1:5192/three-d/index.html?autostart=1`:
+      - status line reached `Prototype active.`
+      - `window.advanceTime` exists
+      - `window.render_game_to_text` exists
+      - no console/page errors were captured in the direct smoke run
 - `node --check game.js` passed.
 - Minimal harness check:
   - `node $WEB_GAME_CLIENT --url http://127.0.0.1:5177 --actions-json '{"steps":[{"buttons":["enter"],"frames":2},{"buttons":[],"frames":2}]}' --iterations 1 --pause-ms 80 --screenshot-dir output/web-game/smoke-lite`
@@ -120,3 +156,15 @@ Original prompt: develop a GTA style game where the camera is on top. A player c
     - `output/web-game/menu-easy-v2/shot-0.png`
     - `output/web-game/gameplay-easy-clear-v2/shot-0.png`
   - No `errors-*.json` files were produced in the mode/HUD runs.
+- 2D/3D launcher + 3D prototype validation on March 17, 2026:
+  - `python3 -m http.server 5184 --directory "/Users/adityagupta/Documents/Codex/Codex game test"`
+  - `npm test`
+  - `node $WEB_GAME_CLIENT --url http://127.0.0.1:5184/index.html --actions-json '{"steps":[{"buttons":[],"frames":2}]}' --iterations 1 --pause-ms 120 --screenshot-dir output/web-game/launcher-3d-root`
+  - `node $WEB_GAME_CLIENT --url http://127.0.0.1:5184/three-d/index.html --click-selector "#start-3d-btn" --actions-json '{"steps":[{"buttons":[],"frames":60},{"buttons":["up"],"frames":18},{"buttons":["up","right"],"frames":18},{"buttons":[],"frames":12}]}' --iterations 1 --pause-ms 180 --screenshot-dir output/web-game/three-d-smoke-v5`
+  - Reviewed state payloads:
+    - `output/web-game/launcher-3d-root/state-0.json`
+    - `output/web-game/three-d-smoke-v5/state-0.json`
+  - Reviewed screenshots:
+    - `output/web-game/launcher-3d-root/shot-0.png`
+    - `output/web-game/three-d-smoke-v5/shot-0.png`
+  - No `errors-*.json` or `console-*.json` files were produced in the latest 3D smoke run.

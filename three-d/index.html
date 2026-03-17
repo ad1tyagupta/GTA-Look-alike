@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Blacktop Dominion 3D</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.183.2/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.183.2/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <main class="app-shell">
+    <div id="scene-root" class="scene-root">
+      <canvas id="three-canvas" aria-label="3D city prototype"></canvas>
+    </div>
+    <section id="menu-overlay" class="overlay">
+      <div class="panel">
+        <p class="eyebrow">Prototype Build</p>
+        <h1>Blacktop Dominion 3D</h1>
+        <p>Explore the first 3D slice of the city using the imported buildings, roads, vehicles, guns, and animated characters.</p>
+        <ul>
+          <li>Move: WASD or Arrow Keys</li>
+          <li>Run: Shift</li>
+          <li>Fullscreen: F</li>
+          <li>Back to launcher: Esc or the link below</li>
+        </ul>
+        <div class="actions">
+          <button id="start-3d-btn" type="button">Enter 3D Prototype</button>
+          <a class="back-link" href="../index.html">Back to Launcher</a>
+        </div>
+        <p id="status-line" class="status-line">Ready to build the first 3D city block.</p>
+      </div>
+    </section>
+    <section id="hud" class="hud hidden">
+      <span id="hud-mode">MODE FREE ROAM</span>
+      <span id="hud-location">SECTOR CENTRAL BLOCK</span>
+      <span id="hud-speed">SPEED 0</span>
+      <span id="hud-scene">SCENE LOADING</span>
+    </section>
+  </main>
+  <script type="module" src="./game.js"></script>
+</body>
+</html>

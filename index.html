@@ -9,7 +9,25 @@
 <body>
   <main class="app">
     <canvas id="game" aria-label="Top-down city game"></canvas>
-    <section id="start-overlay" class="overlay">
+    <section id="launcher-overlay" class="overlay">
+      <div class="panel launcher-panel">
+        <p class="eyebrow">Choose Your Mode</p>
+        <h1>Blacktop Dominion</h1>
+        <p>Keep the original top-down city alive, or jump into the new 3D prototype built from the imported models. Both versions stay available from the same launcher.</p>
+        <div class="mode-grid" aria-label="Game mode selection">
+          <button id="launch-2d-btn" class="launch-card" type="button">
+            <strong>Play 2D</strong>
+            <span>Load the current overhead city with missions, traffic, police, and the existing save flow.</span>
+          </button>
+          <button id="launch-3d-btn" class="launch-card secondary-card" type="button">
+            <strong>Play 3D</strong>
+            <span>Open the new prototype scene with imported buildings, vehicles, characters, and a third-person camera.</span>
+          </button>
+        </div>
+        <p class="menu-note" id="launcher-note">The 2D version stays intact. The 3D version opens in its own folder and runtime.</p>
+      </div>
+    </section>
+    <section id="start-overlay" class="overlay hidden">
       <div class="panel">
         <h1>Blacktop Dominion</h1>
         <p>The city is open, the jobs keep escalating, and every mistake brings more heat. Keep your wheels moving and your exits clean.</p>

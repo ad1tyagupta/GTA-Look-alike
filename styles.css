@@ -71,6 +71,10 @@ body {
   backdrop-filter: blur(6px);
 }
 
+.launcher-panel {
+  width: min(92vw, 720px);
+}
+
 .panel h1 {
   margin: 0 0 10px;
   font-size: 2.1rem;
@@ -81,6 +85,53 @@ body {
 .panel p {
   margin: 0 0 14px;
   color: var(--subtle);
+}
+
+.eyebrow {
+  font-size: 0.82rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.mode-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  margin: 18px 0 12px;
+}
+
+.launch-card {
+  display: grid;
+  gap: 10px;
+  padding: 18px;
+  border-radius: 16px;
+  border: 1px solid rgba(223, 193, 117, 0.24);
+  background: linear-gradient(180deg, rgba(240, 221, 156, 0.96), rgba(220, 169, 79, 0.95));
+  color: #1b1e24;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.18);
+}
+
+.launch-card strong {
+  font-size: 1.1rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.launch-card span {
+  color: rgba(27, 30, 36, 0.84);
+  line-height: 1.45;
+}
+
+.secondary-card {
+  background: linear-gradient(180deg, rgba(95, 123, 151, 0.95), rgba(52, 76, 102, 0.95));
+  color: var(--text);
+}
+
+.secondary-card span {
+  color: rgba(243, 235, 214, 0.82);
 }
 
 .panel ul {
@@ -144,13 +195,15 @@ body {
 
 #start-btn:hover,
 .secondary-btn:hover,
-.mode-btn:hover {
+.mode-btn:hover,
+.launch-card:hover {
   filter: brightness(1.05);
 }
 
 #start-btn:active,
 .secondary-btn:active,
-.mode-btn:active {
+.mode-btn:active,
+.launch-card:active {
   transform: translateY(1px);
 }
 
